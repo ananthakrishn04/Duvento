@@ -30,7 +30,9 @@ from CodingGrounds.views import (
     SolveProblemView,
     UserLoginView,
     UserRegistrationView,
-    current_user
+    current_user,
+    code_editor_view,
+    mainView
 )
 
 from rest_framework import routers
@@ -51,6 +53,7 @@ router.register(r'participations', GameParticipationView, basename='participatio
 # router.register(r'users',User)
 
 urlpatterns = [
+    path('', mainView),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path("solve/<int:problem_id>/", SolveProblemView.as_view({"post": "create"}), name="solve-problem"),
@@ -60,4 +63,5 @@ urlpatterns = [
     path('api/users/register/', UserRegistrationView.as_view(), name='user-register'),
     path('api/users/login/', UserLoginView.as_view(), name='user-login'),
     path('api/users/me/', current_user, name='current-user'),
+    path('api/editor',code_editor_view,name="editor")
 ]

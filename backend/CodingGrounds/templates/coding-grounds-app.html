@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>CodingGrounds</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen flex flex-col">
+    <div id="app" class="container mx-auto px-4 py-8">
+        <!-- Previous authentication and session creation sections remain the same -->
+        <div
+        id="authSection"
+        class="max-w-md mx-auto bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4"
+      >
+            <div id="authTabs" class="flex mb-4">
+                <button
+                    id="loginTab"
+                    class="w-1/2 py-2 bg-blue-500 text-white font-bold rounded-l"
+                >
+                    Login
+                </button>
+                <button
+                    id="registerTab"
+                    class="w-1/2 py-2 bg-gray-300 text-gray-700 font-bold rounded-r"
+                >
+                    Register
+                </button>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" class="space-y-4">
+                <input
+                type="text"
+                id="loginUsername"
+                placeholder="Username"
+                required
+                class="w-full px-3 py-2 border rounded"
+                />
+                <input
+                type="password"
+                id="loginPassword"
+                placeholder="Password"
+                required
+                class="w-full px-3 py-2 border rounded"
+                />
+                <button
+                type="submit"
+                class="w-full bg-blue-500 text-white py-2 rounded"
+                >
+                Login
+                </button>
+            </form>
+    
+            <!-- Register Form (Hidden by Default) -->
+            <form id="registerForm" class="space-y-4 hidden">
+                <input
+                type="text"
+                id="registerUsername"
+                placeholder="Username"
+                required
+                class="w-full px-3 py-2 border rounded"
+                />
+                <input
+                type="email"
+                id="registerEmail"
+                placeholder="Email"
+                required
+                class="w-full px-3 py-2 border rounded"
+                />
+                <input
+                type="password"
+                id="registerPassword"
+                placeholder="Password"
+                required
+                class="w-full px-3 py-2 border rounded"
+                />
+                <button
+                type="submit"
+                class="w-full bg-green-500 text-white py-2 rounded"
+                >
+                Register
+                </button>
+            </form>
+        </div>
+
+        <!-- Session Options Section -->
+       <div
+       id="sessionSection"
+       class="max-w-md mx-auto bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 hidden"
+        >
+            <div class="flex mb-4">
+                <button
+                id="createSessionTab"
+                class="w-1/2 py-2 bg-blue-500 text-white font-bold rounded-l"
+                >
+                Create Session
+                </button>
+                <button
+                id="joinSessionTab"
+                class="w-1/2 py-2 bg-gray-300 text-gray-700 font-bold rounded-r"
+                >
+                Join Session
+                </button>
+            </div>
+
+            <!-- Session Creation Section (Hidden by Default) -->
+            
+            <h2 class="text-2xl font-bold mb-4">Create Game Session</h2>
+            <form id="createSessionForm" class="space-y-4">
+                <input
+                type="text"
+                id="sessionName"
+                placeholder="Session Name"
+                required
+                class="w-full px-3 py-2 border rounded"
+                />
+                <select id="sessionPrivacy" class="w-full px-3 py-2 border rounded">
+                <option value="false">Public</option>
+                <option value="true">Private</option>
+                </select>
+                <input
+                type="number"
+                id="maxParticipants"
+                placeholder="Max Participants (0 = Unlimited)"
+                class="w-full px-3 py-2 border rounded"
+                />
+                <div id="privateCodeSection" class="hidden">
+                <input
+                    type="text"
+                    id="accessCode"
+                    placeholder="Access Code"
+                    class="w-full px-3 py-2 border rounded"
+                />
+                </div>
+
+                <div class="mt-4">
+                <h3 class="text-lg font-semibold mb-2">Select Problems</h3>
+                <div class="grid grid-cols-1 gap-2" id="problemsList">
+                    <!-- Problems will be dynamically loaded here -->
+                </div>
+                </div>
+
+                <button
+                type="submit"
+                class="w-full bg-purple-500 text-white py-2 rounded"
+                >
+                Create Session
+                </button>
+            </form>
+        </div>
+
+        <!-- Join Session Form -->
+        <div id="joinSessionForm" class="space-y-4 hidden">
+            <input
+                type="text"
+                id="joinSessionId"
+                placeholder="Session ID"
+                required
+                class="w-full px-3 py-2 border rounded"
+            />
+            <input
+                type="text"
+                id="joinAccessCode"
+                placeholder="Access Code (if private)"
+                class="w-full px-3 py-2 border rounded"
+            />
+            <button
+                id="joinSessionSubmit"
+                class="w-full bg-green-500 text-white py-2 rounded"
+            >
+                Join Session
+            </button>
+        </div>
+    </div>
+        <!-- Session Management Section -->
+        <div
+          id="sessionManagementSection"
+          class="max-w-2xl mx-auto bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4 hidden"
+        >
+          <div class="flex justify-between items-center mb-4">
+            <h2 id="sessionTitle" class="text-2xl font-bold">Session: </h2>
+            <button
+              id="leaveSessionBtn"
+              class="bg-red-500 text-white px-4 py-2 rounded"
+            >
+              Leave Session
+            </button>
+          </div>
+  
+          <!-- Session Details -->
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold">Session Details</h3>
+            <p id="sessionDetails" class="text-gray-700"></p>
+          </div>
+  
+          <!-- Participants Section -->
+          <div class="mb-4">
+            <h3 class="text-lg font-semibold mb-2">Participants</h3>
+            <div 
+              id="participantsList" 
+              class="grid grid-cols-1 md:grid-cols-2 gap-2"
+            >
+              <!-- Participants will be dynamically added here -->
+            </div>
+          </div>
+  
+          <!-- Session Control Buttons -->
+          <div class="flex space-x-4">
+            <button
+              id="getReadyBtn"
+              class="flex-1 bg-green-500 text-white py-2 rounded"
+            >
+              Get Ready
+            </button>
+            <button
+              id="startSessionBtn"
+              class="flex-1 bg-gray-500 text-white py-2 rounded"
+              disabled
+            >
+              Start Session
+            </button>
+          </div>
+        </div>
+
+        <textarea>
+
+        </textarea>
+  
+        <!-- WebSocket Log Section (for debugging) -->
+        <div
+          id="websocketSection"
+          class="max-w-2xl mx-auto bg-white shadow-md rounded px-8 pt-6 pb-8 hidden"
+        >
+          <h2 class="text-2xl font-bold mb-4">Session Updates</h2>
+          <div
+            id="websocketLog"
+            class="h-64 overflow-y-scroll border p-2 bg-gray-50"
+          >
+            <!-- WebSocket messages will be logged here -->
+          </div>
+        </div>
+      </div>
+
+    <script>
+      // Base URL for API endpoints
+      const BASE_URL = "http://127.0.0.1:8000/api";
+      const editor_url = "/api/editor?problem_id={session.problems.id}&session_id={session.id}"
+      let currentWebSocket;
+      // Authentication Tabs Toggle
+      document.getElementById("loginTab").addEventListener("click", () => {
+        document.getElementById("loginForm").classList.remove("hidden");
+        document.getElementById("registerForm").classList.add("hidden");
+        document
+          .getElementById("loginTab")
+          .classList.add("bg-blue-500", "text-white");
+        document
+          .getElementById("loginTab")
+          .classList.remove("bg-gray-300", "text-gray-700");
+        document
+          .getElementById("registerTab")
+          .classList.remove("bg-green-500", "text-white");
+        document
+          .getElementById("registerTab")
+          .classList.add("bg-gray-300", "text-gray-700");
+      });
+
+      document.getElementById("registerTab").addEventListener("click", () => {
+        document.getElementById("loginForm").classList.add("hidden");
+        document.getElementById("registerForm").classList.remove("hidden");
+        document
+          .getElementById("registerTab")
+          .classList.add("bg-green-500", "text-white");
+        document
+          .getElementById("loginTab")
+          .classList.remove("bg-blue-500", "text-white");
+        document
+          .getElementById("loginTab")
+          .classList.add("bg-gray-300", "text-gray-700");
+        document
+          .getElementById("registerTab")
+          .classList.remove("bg-gray-300", "text-gray-700");
+      });
+
+      // Session Options Tabs Toggle
+      document.getElementById("createSessionTab").addEventListener("click", () => {
+        document.getElementById("createSessionForm").classList.remove("hidden");
+        document.getElementById("joinSessionForm").classList.add("hidden");
+        document
+          .getElementById("createSessionTab")
+          .classList.add("bg-blue-500", "text-white");
+        document
+          .getElementById("createSessionTab")
+          .classList.remove("bg-gray-300", "text-gray-700");
+        document
+          .getElementById("joinSessionTab")
+          .classList.remove("bg-green-500", "text-white");
+        document
+          .getElementById("joinSessionTab")
+          .classList.add("bg-gray-300", "text-gray-700");
+      });
+
+      document.getElementById("joinSessionTab").addEventListener("click", () => {
+        document.getElementById("createSessionForm").classList.add("hidden");
+        document.getElementById("joinSessionForm").classList.remove("hidden");
+        document
+          .getElementById("joinSessionTab")
+          .classList.add("bg-green-500", "text-white");
+        document
+          .getElementById("createSessionTab")
+          .classList.remove("bg-blue-500", "text-white");
+        document
+          .getElementById("createSessionTab")
+          .classList.add("bg-gray-300", "text-gray-700");
+        document
+          .getElementById("joinSessionTab")
+          .classList.remove("bg-gray-300", "text-gray-700");
+      });
+
+
+      // Session Privacy Toggle
+      document
+        .getElementById("sessionPrivacy")
+        .addEventListener("change", (e) => {
+          const privateCodeSection =
+            document.getElementById("privateCodeSection");
+          privateCodeSection.classList.toggle(
+            "hidden",
+            e.target.value === "false"
+          );
+        });
+
+      // Login Form Submission
+      document
+        .getElementById("loginForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const username = document.getElementById("loginUsername").value;
+          const password = document.getElementById("loginPassword").value;
+
+          try {
+            const response = await fetch(`${BASE_URL}/users/login/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ username, password }),
+            });
+
+            const data = await response.json();
+            if (data.token) {
+              localStorage.setItem("authToken", data.token);
+              localStorage.setItem("profileId", data.profile_id);
+              showSessionCreation();
+            } else {
+              alert("Login failed");
+            }
+          } catch (error) {
+            console.error("Login error:", error);
+            alert("Login failed");
+          }
+        });
+
+      // Registration Form Submission
+      document
+        .getElementById("registerForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const username = document.getElementById("registerUsername").value;
+          const email = document.getElementById("registerEmail").value;
+          const password = document.getElementById("registerPassword").value;
+
+          try {
+            const response = await fetch(`${BASE_URL}/users/register/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ "username":username, "email":email, "password":password }),
+            });
+
+            const data = await response.json();
+
+            console.log(data)
+
+            if (data.token) {
+              localStorage.setItem("authToken", data.token);
+              localStorage.setItem("profileId", data.profile_id);
+              showSessionCreation();
+            } else {
+              alert("Registration failed");
+            }
+          } catch (error) {
+            console.error("Registration error:", error);
+            alert("Registration failed");
+          }
+        });
+
+    function showSessionCreation() {
+        document.getElementById("authSection").classList.add("hidden");
+        document.getElementById("sessionSection").classList.remove("hidden");
+        
+        // Fetch problems when session creation is shown
+        fetchProblems();
+      }
+
+      async function fetchProblems() {
+        const problemsList = document.getElementById("problemsList");
+        problemsList.innerHTML = '<p class="text-center">Loading problems...</p>';
+
+        try {
+          const response = await fetch(`${BASE_URL}/problems/`, {
+            method: "GET",
+            headers: {
+              "Authorization": `Token ${localStorage.getItem("authToken")}`,
+              "Content-Type": "application/json"
+            }
+          });
+
+          const problems = await response.json();
+
+          // Clear previous loading message
+          problemsList.innerHTML = "";
+
+          // Create checkboxes for each problem
+          problems.forEach(problem => {
+            const problemDiv = document.createElement("div");
+            problemDiv.classList.add("flex", "items-center", "space-x-2", "border", "p-2", "rounded");
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.id = `problem-${problem.id}`;
+            checkbox.name = "selectedProblems";
+            checkbox.value = problem.id;
+            checkbox.classList.add("form-checkbox", "h-4", "w-4");
+
+            const label = document.createElement("label");
+            label.htmlFor = `problem-${problem.id}`;
+            label.classList.add("flex-grow");
+            label.textContent = problem.title;
+
+            const difficultySpan = document.createElement("span");
+            difficultySpan.textContent = problem.difficulty;
+            difficultySpan.classList.add(
+              "text-sm", 
+              "px-2", 
+              "py-1", 
+              "rounded", 
+              problem.difficulty === 1 ?  "text-green-800" :
+              problem.difficulty === 2 ? "text-yellow-800" :
+              "text-red-800"
+            );
+            // "bg-green-100"
+            // bg-yellow-100 
+            // bg-red-100 
+            problemDiv.appendChild(checkbox);
+            problemDiv.appendChild(label);
+            problemDiv.appendChild(difficultySpan);
+
+            problemsList.appendChild(problemDiv);
+          });
+        } catch (error) {
+          console.error("Error fetching problems:", error);
+          problemsList.innerHTML = '<p class="text-center text-red-500">Failed to load problems</p>';
+        }
+      }
+
+      // Modify Session Creation Form Submission
+      document
+        .getElementById("createSessionForm")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const name = document.getElementById("sessionName").value;
+          const isPrivate =
+            document.getElementById("sessionPrivacy").value === "true";
+          const maxParticipants =
+            document.getElementById("maxParticipants").value || 0;
+          const accessCode = isPrivate
+            ? document.getElementById("accessCode").value
+            : null;
+
+          // Collect selected problem IDs
+          const selectedProblems = Array.from(
+            document.querySelectorAll('input[name="selectedProblems"]:checked')
+          ).map(checkbox => checkbox.value);
+
+          try {
+            const response = await fetch(`${BASE_URL}/sessions/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${localStorage.getItem("authToken")}`,
+              },
+              body: JSON.stringify({
+                title: name,
+                is_private: isPrivate,
+                max_participants: maxParticipants,
+                access_code: accessCode,
+                problems: selectedProblems // Add selected problems to the request
+              }),
+            });
+
+            const data = await response.json();
+
+            console.log(data);
+            
+            if (data.id) {
+                initSessionManagement(data);
+            } else {
+              alert("Session creation failed");
+            }
+          } catch (error) {
+            console.error("Session creation error:", error);
+            alert("Session creation failed");
+          }
+        });
+
+      // Join Session Submission
+      document
+        .getElementById("joinSessionSubmit")
+        .addEventListener("click", async () => {
+          const sessionId = document.getElementById("joinSessionId").value;
+          const accessCode = document.getElementById("joinAccessCode").value;
+
+          try {
+            const response = await fetch(`${BASE_URL}/sessions/${sessionId}/join/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${localStorage.getItem("authToken")}`,
+              },
+              body: JSON.stringify({
+                access_code: accessCode || null
+              }),
+            });
+
+            const data = await response.json();
+
+            console.log(data);
+            
+            if (data.detail === "Joined session successfully") {
+              initSessionManagement(data.session);
+            //   updateSessionProblems(data.session.problems);
+            } else {
+              alert("Failed to join session");
+            }
+          } catch (error) {
+            console.error("Join session error:", error);
+            alert("Failed to join session");
+          }
+        });
+
+      // Initialize Session Management
+      function initSessionManagement(sessionData) {
+        // Hide previous sections
+        document.getElementById("sessionSection").classList.add("hidden");
+        
+        // Show session management section
+        const sessionManagementSection = document.getElementById("sessionManagementSection");
+        sessionManagementSection.classList.remove("hidden");
+
+        // Set session title
+        document.getElementById("sessionTitle").textContent = `Session: ${sessionData.title}`;
+
+        // Set session details
+        const sessionDetails = document.getElementById("sessionDetails");
+        sessionDetails.textContent = `ID: ${sessionData.id} | 
+          ${sessionData.is_private ? 'Private' : 'Public'} | 
+          Max Participants: ${sessionData.max_participants || 'Unlimited'}`;
+
+
+        // updateParticipants(participants);
+
+        // Initialize WebSocket
+        initWebSocket(sessionData.id);
+
+        showWebSocketLog();
+
+        // Setup session control buttons
+        setupSessionControlButtons(sessionData.id);
+      }
+
+      // Setup Session Control Buttons
+      function setupSessionControlButtons(sessionId) {
+        const getReadyBtn = document.getElementById("getReadyBtn");
+        const startSessionBtn = document.getElementById("startSessionBtn");
+        const leaveSessionBtn = document.getElementById("leaveSessionBtn");
+
+        // Get Ready Button
+        getReadyBtn.addEventListener("click", async () => {
+          try {
+            const response = await fetch(`${BASE_URL}/sessions/${sessionId}/ready/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${localStorage.getItem("authToken")}`,
+              }
+            });
+
+            const data = await response.json();
+            console.log("Ready status:", data);
+
+            // Change button style to indicate ready status
+            getReadyBtn.classList.toggle("bg-green-500", true);
+            getReadyBtn.classList.toggle("bg-gray-500", false);
+            getReadyBtn.textContent = "Ready";
+            getReadyBtn.disabled = true;
+
+            // startSessionBtn.disabled = false;
+
+          } catch (error) {
+            console.error("Error setting ready status:", error);
+            alert("Failed to set ready status");
+          }
+        });
+
+        // Start Session Button
+        startSessionBtn.addEventListener("click", async () => {
+          try {
+            const response = await fetch(`${BASE_URL}/sessions/${sessionId}/start/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${localStorage.getItem("authToken")}`,
+              }
+            });
+
+            const data = await response.json();
+            console.log("Session start response:", data);
+
+            if (data.status === "started") {
+              startSessionBtn.textContent = data.detail;
+              startSessionBtn.disabled = true;
+
+              window.location.href = `${BASE_URL}${data.redirect_url}`;
+
+            }
+          } catch (error) {
+            console.error("Error starting session:", error);
+            alert("Failed to start session");
+          }
+        });
+
+        // Leave Session Button
+        leaveSessionBtn.addEventListener("click", async () => {
+          try {
+            const response = await fetch(`${BASE_URL}/sessions/${sessionId}/leave/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${localStorage.getItem("authToken")}`,
+              }
+            });
+
+            const data = await response.json();
+            console.log("Leave session response:", data);
+
+            // Close WebSocket
+            if (currentWebSocket) {
+              currentWebSocket.close();
+            }
+
+            // Return to session options
+            document.getElementById("sessionManagementSection").classList.add("hidden");
+            document.getElementById("sessionSection").classList.remove("hidden");
+          } catch (error) {
+            console.error("Error leaving session:", error);
+            alert("Failed to leave session");
+          }
+        });
+      }
+
+      // Initialize WebSocket Connection
+      function initWebSocket(sessionId) {
+        const logElement = document.getElementById("websocketLog");
+        const wsUrl = `ws://localhost:8000/ws/sessions/${sessionId}/`;
+
+        // Close existing WebSocket if open
+        if (currentWebSocket) {
+          currentWebSocket.close();
+        }
+
+        currentWebSocket = new WebSocket(wsUrl);
+
+        currentWebSocket.onopen = () => {
+          logMessage("Connected to WebSocket");
+        };
+
+        currentWebSocket.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+
+          logMessage(JSON.stringify(data, null, 2));
+
+          // Handle different WebSocket message types
+          switch(data.type) {
+            case 'participant_update':
+              updateParticipants(data.participants);
+              break;
+            case 'session_problems':
+              updateSessionProblems(data.problems);
+              break;
+            case 'ready_status':
+              updateSessionStatus(data);
+              break;
+          }
+        };
+
+        currentWebSocket.onerror = (error) => {
+          logMessage(`WebSocket Error: ${error}`);
+        };
+
+        currentWebSocket.onclose = () => {
+          logMessage("WebSocket connection closed");
+        };
+
+        function logMessage(message) {
+          const messageElement = document.createElement("pre");
+          messageElement.textContent = message;
+          messageElement.classList.add("text-sm", "border-b", "py-1");
+          logElement.appendChild(messageElement);
+          logElement.scrollTop = logElement.scrollHeight;
+        }
+      }
+
+      // Update Participants List
+      function updateParticipants(participants) {
+        const participantsList = document.getElementById("participantsList");
+        participantsList.innerHTML = ""; // Clear existing participants
+
+        participants.forEach(participant => {
+          const participantDiv = document.createElement("div");
+          participantDiv.id = `participant-${participant.profile__id}`;
+          participantDiv.classList.add(
+            "flex", 
+            "items-center", 
+            "space-x-2", 
+            "border", 
+            "p-2", 
+            "rounded",
+            "participant",
+            participant.is_ready ? "bg-green-100" : "bg-gray-100"
+          );
+
+          const nameSpan = document.createElement("span");
+          nameSpan.textContent = participant.profile__display_name;
+          nameSpan.classList.add("flex-grow");
+
+          const statusSpan = document.createElement("span");
+          statusSpan.textContent = participant.is_ready ? "Ready" : "Not Ready";
+          statusSpan.classList.add(
+            "text-sm", 
+            "px-2", 
+            "py-1", 
+            "rounded",
+            "status",
+            participant.is_ready ? "bg-green-500" : "bg-gray-500",
+          );
+
+          participantDiv.appendChild(nameSpan);
+          participantDiv.appendChild(statusSpan);
+
+          participantsList.appendChild(participantDiv);
+        });
+      }
+
+
+      // Update Session Status
+      function updateSessionStatus(statusData) {
+        const startSessionBtn = document.getElementById("startSessionBtn");
+
+        // Enable/disable start button based on ready status
+        if (statusData.all_ready) {
+          startSessionBtn.disabled = false;
+          startSessionBtn.classList.remove("bg-gray-500");
+          startSessionBtn.classList.add("bg-blue-500");
+        } else {
+          startSessionBtn.disabled = true;
+          startSessionBtn.classList.remove("bg-blue-500");
+          startSessionBtn.classList.add("bg-gray-500");
+        }
+
+      }
+      // Show WebSocket Log Section
+      function showWebSocketLog() {
+        document.getElementById("sessionSection").classList.add("hidden");
+        document.getElementById("websocketSection").classList.remove("hidden");
+      }
+
+    //   // Initialize WebSocket Connection
+    //   function initWebSocket(sessionId) {
+    //     const logElement = document.getElementById("websocketLog");
+    //     const wsUrl = `ws://localhost:8000/ws/sessions/${sessionId}/`;
+
+    //     const socket = new WebSocket(wsUrl);
+
+    //     socket.onopen = () => {
+    //       logMessage("Connected to WebSocket");
+    //     };
+
+    //     socket.onmessage = (event) => {
+    //       const data = JSON.parse(event.data);
+    //       logMessage(JSON.stringify(data, null, 2));
+    //     };
+
+    //     socket.onerror = (error) => {
+    //       logMessage(`WebSocket Error: ${error}`);
+    //     };
+
+    //     socket.onclose = () => {
+    //       logMessage("WebSocket connection closed");
+    //     };
+
+    //     function logMessage(message) {
+    //       const messageElement = document.createElement("pre");
+    //       messageElement.textContent = message;
+    //       messageElement.classList.add("text-sm", "border-b", "py-1");
+    //       logElement.appendChild(messageElement);
+    //       logElement.scrollTop = logElement.scrollHeight;
+    //     }
+    //   }
+    </script>
+  </body>
+</html>

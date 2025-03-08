@@ -74,7 +74,7 @@ class CodingProblemSerializer(serializers.ModelSerializer):
 class SubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Submission
-        fields = '__all__'
+        fields = ['code','language']
 
 class GameParticipationSerializer(serializers.ModelSerializer):
     class Meta:

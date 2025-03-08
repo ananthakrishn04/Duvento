@@ -1,0 +1,69 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/codemirror.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/mode/java/java.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/show-hint.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.13/addon/hint/show-hint.min.css">
+</head>
+<body>
+    <h2>Code Editor</h2>
+
+    <label for="language">Select Language:</label>
+    <select id="language">
+        <option value="python">Python</option>
+        <option value="javascript">JavaScript</option>
+        <option value="java">Java</option>
+    </select>
+
+    <textarea id="codeEditor"></textarea>
+    <button onclick="submitCode()">Submit</button>
+
+    <script>
+        // Initialize CodeMirror
+        var editor = CodeMirror.fromTextArea(document.getElementById("codeEditor"), {
+            lineNumbers: true,
+            mode: "python",
+            extraKeys: { "Ctrl-Space": "autocomplete" }
+        });
+
+        // Change mode based on selected language
+        document.getElementById("language").addEventListener("change", function () {
+            var lang = this.value;
+            var mode = lang === "python" ? "python" : lang === "javascript" ? "javascript" : "text/x-java";
+            editor.setOption("mode", mode);
+        });
+
+        function submitCode() {
+            var code = editor.getValue();
+            var language = document.getElementById("language").value;
+
+            fetch("{% url 'submission-list' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token }}",
+                    "Authorization" : `Token ${localStorage.getItem("authToken")}`
+                },
+                body: JSON.stringify({ 
+                    problem_id: "{{ problem.id }}",
+                    session_id: "{{ session.id }}",
+                    code: code,
+                    language: language 
+                })
+            })
+            .then(response => response.json())
+            .then(data => console.log("Success:", data))
+            .catch(error => console.error("Error:", error));
+
+        }
+    </script>
+</body>
+</html>

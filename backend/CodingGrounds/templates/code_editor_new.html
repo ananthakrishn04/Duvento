@@ -1,0 +1,197 @@
+<!-- code_editor.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Code Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.0/codemirror.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.0/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.0/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.0/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.0/mode/clike/clike.min.js"></script>
+    <style>
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        .left-panel {
+            flex: 1;
+            padding: 20px;
+            border-right: 1px solid #ccc;
+        }
+        .right-panel {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .problem-description {
+            margin-bottom: 20px;
+        }
+        .code-editor {
+            flex-grow: 1;
+        }
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .CodeMirror {
+            height: 500px;
+            border: 1px solid #ddd;
+        }
+        .result {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            min-height: 100px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-panel">
+            <h2>Problem: <span id="problem-title"></span></h2>
+            <div id="problem-description" class="problem-description"></div>
+        </div>
+        <div class="right-panel">
+            <div class="language-selector">
+                <label for="language">Language:</label>
+                <select id="language">
+                    <option value="python">Python</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="java">Java</option>
+                </select>
+            </div>
+            <div class="code-editor">
+                <textarea id="code-area"></textarea>
+            </div>
+            <div class="controls">
+                <button id="run-btn">Run Code</button>
+                <button id="submit-btn">Submit Solution</button>
+            </div>
+            <div id="result" class="result">
+                <div>Results will appear here</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Get problem ID and session ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const problemId = urlParams.get('problem_id');
+        const sessionId = urlParams.get('session_id');
+        
+        // Initialize CodeMirror
+        const codeEditor = CodeMirror.fromTextArea(document.getElementById('code-area'), {
+            lineNumbers: true,
+            mode: 'python',
+            theme: 'default',
+            indentUnit: 4,
+            tabSize: 4,
+            lineWrapping: true,
+            extraKeys: {"Tab": "indentMore", "Shift-Tab": "indentLess"}
+        });
+
+        // Change language mode when selection changes
+        document.getElementById('language').addEventListener('change', function(e) {
+            const language = e.target.value;
+            let mode;
+            switch(language) {
+                case 'python':
+                    mode = 'python';
+                    break;
+                case 'javascript':
+                    mode = 'javascript';
+                    break;
+                case 'java':
+                    mode = 'text/x-java';
+                    break;
+                default:
+                    mode = 'python';
+            }
+            codeEditor.setOption('mode', mode);
+        });
+
+        // Fetch problem details
+        fetch(`/api/sessions/${sessionId}/problems/`,{
+            headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Token ${localStorage.getItem("authToken")}`,
+            },  
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('problem-title').textContent = data[0].title;
+                document.getElementById('problem-description').innerHTML = data[0].description;
+            })
+            .catch(error => {
+                console.error('Error fetching problem details:', error);
+            });
+
+        // Submit button handler
+        document.getElementById('submit-btn').addEventListener('click', function() {
+            const code = codeEditor.getValue();
+            const language = document.getElementById('language').value;
+            
+            // Show loading state
+            document.getElementById('result').innerHTML = '<div>Processing submission...</div>';
+            
+            // Submit code to server
+            fetch("/api/submissions/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie('csrftoken'),
+                    Authorization: `Token ${localStorage.getItem("authToken")}`,
+                },
+                body: JSON.stringify({
+                    problem_id: problemId,
+                    session_id: sessionId,
+                    code: code,
+                    language: language
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Display results
+                console.log(data)
+                if (data.error) {
+                    document.getElementById('result').innerHTML = `
+                        <h3>Error</h3>
+                        <pre>${data.error}</pre>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML = `
+                        <h3>Status: ${data.status || 'Pending'}</h3>
+                        <div>Output: <pre>${data.output || 'No output'}</pre></div>
+                        <div>Execution Time: ${data.time || 'N/A'}</div>
+                        <div>Memory Usage: ${data.memory || 'N/A'}</div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error</h3>
+                    <pre>Failed to submit: ${error.message}</pre>
+                `;
+            });
+        });
+
+        // Helper function to get CSRF token from cookies
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+    </script>
+</body>
+</html>

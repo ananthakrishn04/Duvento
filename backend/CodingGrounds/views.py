@@ -1,5 +1,6 @@
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
+from django.http import HttpResponse, JsonResponse
 
 # Create your views here.
 from rest_framework import viewsets,status
@@ -24,7 +25,8 @@ from .serializers import (
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-
+def mainView(request):
+    return render(request,"coding-grounds-app.html")
 class BadgeView(viewsets.ModelViewSet):
     serializer_class = BadgeSerializer
     queryset = Badge.objects.all()
@@ -32,38 +34,6 @@ class BadgeView(viewsets.ModelViewSet):
 class CodingProfileView(viewsets.ModelViewSet):
     serializer_class = CodingProfileSerializer
     queryset = CodingProfile.objects.all()
-
-    # def create(self, request, *args, **kwargs):
-    #     data = request.data
-    #     # username = data.get('username')
-    #     # email = data.get('email')
-    #     password = data.get('password')  # Make sure password is included in the request
-        
-    #     # Create the Django User and connect it to the profile
-
-    #     if password:
-    #     # Create the CodingProfile first
-    #         serializer = self.get_serializer(data=data)
-    #         if serializer.is_valid():
-    #             profile = serializer.save()
-            
-    #             user = profile.create_auth_user(password)
-    #             # Return both profile and user info
-    #             return Response({
-    #                 'profile': serializer.data,
-    #                 'user_created': True,
-    #                 'username': user.username
-    #             }, status=status.HTTP_201_CREATED)
-    #         else:
-    #             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    #     else:
-    #         return Response({
-    #             'profile':None,
-    #             'user_created': False,
-    #             'error': 'Password is required to create a user'
-    #         }, status=status.HTTP_206_PARTIAL_CONTENT)
-        
-        
 
 class CodingProblemView(viewsets.ModelViewSet):
     serializer_class = CodingProblemSerializer
@@ -73,31 +43,97 @@ class SubmissionView(viewsets.ModelViewSet):
     queryset = Submission.objects.all()
     serializer_class = SubmissionSerializer
     permission_classes = [IsAuthenticated]
-    
-    def perform_create(self, serializer):
-        profile = self.request.user.coding_profile
-        problem_id = self.request.data.get('problem_id')
-        session_id = self.request.data.get('session_id')
+
+    def create(self, request, *args, **kwargs):
+        profile = request.user.coding_profile
+        problem_id = request.data.get('problem_id')
+        session_id = request.data.get('session_id')
+        code = request.data.get('code')
+        language = request.data.get('language', 'python')
         
         problem = get_object_or_404(CodingProblem, id=problem_id)
         session = get_object_or_404(GameSession, id=session_id)
         
-        # Check if user is a participant
         if not session.participants.filter(id=profile.id).exists():
             return Response({"detail": "Not a participant in this session"}, 
-                           status=status.HTTP_403_FORBIDDEN)
-        
-        # Check if session is active
+                        status=status.HTTP_403_FORBIDDEN)
+    
         if not session.is_active or session.end_time < timezone.now():
             return Response({"detail": "Session is not active"}, 
-                           status=status.HTTP_400_BAD_REQUEST)
+                        status=status.HTTP_400_BAD_REQUEST)
         
-        # Create submission
-        serializer.save(
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        submission = serializer.save(
             profile=profile,
             problem=problem,
+            code=code,
+            language=language,
             game_session=session
         )
+
+        result = self.coderunner(code, language)
+
+        return Response({
+            'submission': serializer.data,
+            'result': result
+        }, status=status.HTTP_201_CREATED)
+
+    def coderunner(self, source_code, language):
+        # Judge0 API endpoint
+        JUDGE0_API_URL = "http://192.168.1.8:2358"
+        SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
+
+        lanugageMap = {
+            "python" : 71,
+            "javascript" : 63,
+            "java" : 62
+        }
+
+        # Prepare the request payload with CPU and memory limits
+        data = {
+            "source_code": source_code,
+            "language_id": lanugageMap[language],
+            "cpu_time_limit": 2,  # Max execution time in seconds
+            "memory_limit": 128000,  # Max memory in KB (128MB)
+        }
+
+        # # Submit the code
+        # response = requests.post(SUBMISSION_URL, json=data)
+        # token = response.json().get("token")
+
+        # if not token:
+        #     print("Failed to get submission token.")
+        #     exit()
+
+        # # Fetch the result
+        # RESULT_URL = f"{SUBMISSION_URL}/{token}"
+        # while True:
+        #     result = requests.get(RESULT_URL).json()
+        #     if result["status"]["id"] in [1, 2]:  # Queued or Processing
+        #         # time.sleep(1)
+        #         pass
+        #     else:
+        #         break
+
+        # Print the output
+        # return {
+        #     "output" : result.get("stdout", "No output"),
+        #     "error" : result.get("stderr", "No errors"),
+        #     "status" : result["status"]["description"],
+        #     "time" : str(result["time"]) + "s",
+        #     "memory" : str(result["memory"]) + "KB"
+        # }
+
+        return {
+            "output" : "",
+            "error" : "",
+            "status" : "",
+            "time" : "",
+            "memory" : ""
+        }
+
 
 class GameSessionView(viewsets.ModelViewSet):
     # serializer_class = GameSessionSerializer
@@ -108,18 +144,7 @@ class GameSessionView(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         profile = self.request.user.coding_profile
         session = serializer.save(created_by=profile)
-        # Automatically add creator as participant
         session.add_participant(profile)
-        print("Request Data:", self.request.data)
-        # print("Validated Data:", serializer.validated_data)
-
-        # try:
-        #     session = serializer.save(created_by=profile)
-        #     session.add_participant(profile)
-        # except Exception as e:
-        #     print(f"Session Creation Error: {str(e)}")
-        #     raise
-
     
     @action(detail=True, methods=['post'])
     def join(self, request, pk=None):
@@ -153,6 +178,8 @@ class GameSessionView(viewsets.ModelViewSet):
 
             serializer = self.get_serializer(session)
 
+            self.update_participants(session=session)
+
             return Response({"detail": "Joined session successfully","session":serializer.data})
         else:
             return Response({"detail": "Already a participant"}, status=status.HTTP_400_BAD_REQUEST)
@@ -175,6 +202,9 @@ class GameSessionView(viewsets.ModelViewSet):
                 }
             }
         )
+
+        self.update_participants(session=session)
+        
         return Response({"detail": "Left session successfully"})
     
     @action(detail=True, methods=['post'])
@@ -207,6 +237,8 @@ class GameSessionView(viewsets.ModelViewSet):
                 'all_ready':all_ready,
             }
         )
+
+        self.update_participants(session=session)
         
         return Response({
             "is_ready": True,
@@ -239,7 +271,18 @@ class GameSessionView(viewsets.ModelViewSet):
                     'detail' : 'session_started'
                 }
             )
-            return Response({"status":"started","detail": "Session started successfully"})
+            problems = list(session.problems.all())
+            # list(GameParticipation.objects.filter(game_session=session).values(
+            # 'profile__id', 
+            # 'profile__display_name',  
+            # 'is_ready'
+            # ))
+
+
+            editor_url = f"/editor?problem_id={problems[0].id}&session_id={session.id}"
+
+            return Response({"status":"started","detail": "Session started successfully","redirect_url":editor_url}, 
+                            status=status.HTTP_200_OK)
         else:
             return Response({"detail": "Unable to start session"}, 
                            status=status.HTTP_400_BAD_REQUEST)
@@ -284,6 +327,23 @@ class GameSessionView(viewsets.ModelViewSet):
                 'message': data
             }
         )
+    
+    def update_participants(self,session):
+        participants_data = list(GameParticipation.objects.filter(game_session=session).values(
+            'profile__id', 
+            'profile__display_name',  
+            'is_ready'
+        ))
+
+
+        self.notify_session_update(
+                session.id, 
+                'participant_update',
+                {
+                    'type': 'participant_update',
+                    'participants' : participants_data
+                }
+            )
 
 
 class GameParticipationView(viewsets.ModelViewSet):
@@ -463,3 +523,25 @@ def current_user(request):
             'email': request.user.email,
             'error': 'No coding profile found for this user'
         })
+
+
+@api_view(['GET'])
+def code_editor_view(request):
+    problem_id = request.GET.get('problem_id')
+    session_id = request.GET.get('session_id')
+
+    if not problem_id or not session_id:
+        return HttpResponse("Problem ID and Session ID are required", status=400)
+
+    # Check if problem and session exist
+    try:
+        problem = CodingProblem.objects.get(id=problem_id)
+        session = GameSession.objects.get(id=session_id)
+    except (CodingProblem.DoesNotExist, GameSession.DoesNotExist):
+        return HttpResponse("Problem or Session not found", status=404)
+
+    # Return the code editor template
+    return render(request, 'code_editor_new.html', {
+        'problem': problem,
+        'session': session,
+    })

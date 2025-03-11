@@ -122,7 +122,7 @@
                 type="number"
                 id="maxParticipants"
                 placeholder="Max Participants (0 = Unlimited)"
-                class="w-full px-3 py-2 border rounded"
+                class="w-full px-3 py-2 border rounded hidden"
                 />
                 <div id="privateCodeSection" class="hidden">
                 <input
@@ -134,7 +134,7 @@
                 </div>
 
                 <div class="mt-4">
-                <h3 class="text-lg font-semibold mb-2">Select Problems</h3>
+                <h3 class="text-lg font-semibold mb-2 hidden">Select Problems</h3>
                 <div class="grid grid-cols-1 gap-2" id="problemsList">
                     <!-- Problems will be dynamically loaded here -->
                 </div>
@@ -221,10 +221,6 @@
             </button>
           </div>
         </div>
-
-        <textarea>
-
-        </textarea>
   
         <!-- WebSocket Log Section (for debugging) -->
         <div
@@ -246,6 +242,7 @@
       const BASE_URL = "http://127.0.0.1:8000/api";
       const editor_url = "/api/editor?problem_id={session.problems.id}&session_id={session.id}"
       let currentWebSocket;
+
       // Authentication Tabs Toggle
       document.getElementById("loginTab").addEventListener("click", () => {
         document.getElementById("loginForm").classList.remove("hidden");
@@ -351,6 +348,7 @@
               localStorage.setItem("authToken", data.token);
               localStorage.setItem("profileId", data.profile_id);
               showSessionCreation();
+              // fetchMySessions();
             } else {
               alert("Login failed");
             }
@@ -398,73 +396,8 @@
     function showSessionCreation() {
         document.getElementById("authSection").classList.add("hidden");
         document.getElementById("sessionSection").classList.remove("hidden");
-        
-        // Fetch problems when session creation is shown
-        fetchProblems();
       }
 
-      async function fetchProblems() {
-        const problemsList = document.getElementById("problemsList");
-        problemsList.innerHTML = '<p class="text-center">Loading problems...</p>';
-
-        try {
-          const response = await fetch(`${BASE_URL}/problems/`, {
-            method: "GET",
-            headers: {
-              "Authorization": `Token ${localStorage.getItem("authToken")}`,
-              "Content-Type": "application/json"
-            }
-          });
-
-          const problems = await response.json();
-
-          // Clear previous loading message
-          problemsList.innerHTML = "";
-
-          // Create checkboxes for each problem
-          problems.forEach(problem => {
-            const problemDiv = document.createElement("div");
-            problemDiv.classList.add("flex", "items-center", "space-x-2", "border", "p-2", "rounded");
-
-            const checkbox = document.createElement("input");
-            checkbox.type = "checkbox";
-            checkbox.id = `problem-${problem.id}`;
-            checkbox.name = "selectedProblems";
-            checkbox.value = problem.id;
-            checkbox.classList.add("form-checkbox", "h-4", "w-4");
-
-            const label = document.createElement("label");
-            label.htmlFor = `problem-${problem.id}`;
-            label.classList.add("flex-grow");
-            label.textContent = problem.title;
-
-            const difficultySpan = document.createElement("span");
-            difficultySpan.textContent = problem.difficulty;
-            difficultySpan.classList.add(
-              "text-sm", 
-              "px-2", 
-              "py-1", 
-              "rounded", 
-              problem.difficulty === 1 ?  "text-green-800" :
-              problem.difficulty === 2 ? "text-yellow-800" :
-              "text-red-800"
-            );
-            // "bg-green-100"
-            // bg-yellow-100 
-            // bg-red-100 
-            problemDiv.appendChild(checkbox);
-            problemDiv.appendChild(label);
-            problemDiv.appendChild(difficultySpan);
-
-            problemsList.appendChild(problemDiv);
-          });
-        } catch (error) {
-          console.error("Error fetching problems:", error);
-          problemsList.innerHTML = '<p class="text-center text-red-500">Failed to load problems</p>';
-        }
-      }
-
-      // Modify Session Creation Form Submission
       document
         .getElementById("createSessionForm")
         .addEventListener("submit", async (e) => {
@@ -473,15 +406,11 @@
           const isPrivate =
             document.getElementById("sessionPrivacy").value === "true";
           const maxParticipants =
-            document.getElementById("maxParticipants").value || 0;
+            document.getElementById("maxParticipants").value || 2;
           const accessCode = isPrivate
             ? document.getElementById("accessCode").value
             : null;
 
-          // Collect selected problem IDs
-          const selectedProblems = Array.from(
-            document.querySelectorAll('input[name="selectedProblems"]:checked')
-          ).map(checkbox => checkbox.value);
 
           try {
             const response = await fetch(`${BASE_URL}/sessions/`, {
@@ -494,8 +423,7 @@
                 title: name,
                 is_private: isPrivate,
                 max_participants: maxParticipants,
-                access_code: accessCode,
-                problems: selectedProblems // Add selected problems to the request
+                access_code: accessCode
               }),
             });
 
@@ -539,7 +467,6 @@
             
             if (data.detail === "Joined session successfully") {
               initSessionManagement(data.session);
-            //   updateSessionProblems(data.session.problems);
             } else {
               alert("Failed to join session");
             }
@@ -551,31 +478,22 @@
 
       // Initialize Session Management
       function initSessionManagement(sessionData) {
-        // Hide previous sections
         document.getElementById("sessionSection").classList.add("hidden");
         
-        // Show session management section
         const sessionManagementSection = document.getElementById("sessionManagementSection");
         sessionManagementSection.classList.remove("hidden");
 
-        // Set session title
         document.getElementById("sessionTitle").textContent = `Session: ${sessionData.title}`;
 
-        // Set session details
         const sessionDetails = document.getElementById("sessionDetails");
         sessionDetails.textContent = `ID: ${sessionData.id} | 
           ${sessionData.is_private ? 'Private' : 'Public'} | 
-          Max Participants: ${sessionData.max_participants || 'Unlimited'}`;
+          Max Participants: ${sessionData.max_participants || '2'}`;
 
-
-        // updateParticipants(participants);
-
-        // Initialize WebSocket
         initWebSocket(sessionData.id);
 
-        showWebSocketLog();
+        // showWebSocketLog(); 
 
-        // Setup session control buttons
         setupSessionControlButtons(sessionData.id);
       }
 
@@ -605,8 +523,6 @@
             getReadyBtn.textContent = "Ready";
             getReadyBtn.disabled = true;
 
-            // startSessionBtn.disabled = false;
-
           } catch (error) {
             console.error("Error setting ready status:", error);
             alert("Failed to set ready status");
@@ -630,9 +546,6 @@
             if (data.status === "started") {
               startSessionBtn.textContent = data.detail;
               startSessionBtn.disabled = true;
-
-              window.location.href = `${BASE_URL}${data.redirect_url}`;
-
             }
           } catch (error) {
             console.error("Error starting session:", error);
@@ -652,7 +565,6 @@
             });
 
             const data = await response.json();
-            console.log("Leave session response:", data);
 
             // Close WebSocket
             if (currentWebSocket) {
@@ -671,7 +583,7 @@
 
       // Initialize WebSocket Connection
       function initWebSocket(sessionId) {
-        const logElement = document.getElementById("websocketLog");
+        // const logElement = document.getElementById("websocketLog");
         const wsUrl = `ws://localhost:8000/ws/sessions/${sessionId}/`;
 
         // Close existing WebSocket if open
@@ -681,22 +593,23 @@
 
         currentWebSocket = new WebSocket(wsUrl);
 
-        currentWebSocket.onopen = () => {
-          logMessage("Connected to WebSocket");
-        };
+        // currentWebSocket.onopen = () => {
+        //   // logMessage("Connected to WebSocket");
+        // };
 
         currentWebSocket.onmessage = (event) => {
           const data = JSON.parse(event.data);
 
-          logMessage(JSON.stringify(data, null, 2));
+          // logMessage(JSON.stringify(data, null, 2));
 
           // Handle different WebSocket message types
           switch(data.type) {
             case 'participant_update':
               updateParticipants(data.participants);
               break;
-            case 'session_problems':
-              updateSessionProblems(data.problems);
+            case 'start':
+              console.log(data);
+              window.location.href = `${BASE_URL}${data.redirect_url}`;
               break;
             case 'ready_status':
               updateSessionStatus(data);
@@ -704,21 +617,21 @@
           }
         };
 
-        currentWebSocket.onerror = (error) => {
-          logMessage(`WebSocket Error: ${error}`);
-        };
+        // currentWebSocket.onerror = (error) => {
+        //   logMessage(`WebSocket Error: ${error}`);
+        // };
 
-        currentWebSocket.onclose = () => {
-          logMessage("WebSocket connection closed");
-        };
+        // currentWebSocket.onclose = () => {
+        //   logMessage("WebSocket connection closed");
+        // };
 
-        function logMessage(message) {
-          const messageElement = document.createElement("pre");
-          messageElement.textContent = message;
-          messageElement.classList.add("text-sm", "border-b", "py-1");
-          logElement.appendChild(messageElement);
-          logElement.scrollTop = logElement.scrollHeight;
-        }
+        // function logMessage(message) {
+        //   const messageElement = document.createElement("pre");
+        //   messageElement.textContent = message;
+        //   messageElement.classList.add("text-sm", "border-b", "py-1");
+        //   logElement.appendChild(messageElement);
+        //   logElement.scrollTop = logElement.scrollHeight;
+        // }
       }
 
       // Update Participants List
@@ -784,39 +697,6 @@
         document.getElementById("sessionSection").classList.add("hidden");
         document.getElementById("websocketSection").classList.remove("hidden");
       }
-
-    //   // Initialize WebSocket Connection
-    //   function initWebSocket(sessionId) {
-    //     const logElement = document.getElementById("websocketLog");
-    //     const wsUrl = `ws://localhost:8000/ws/sessions/${sessionId}/`;
-
-    //     const socket = new WebSocket(wsUrl);
-
-    //     socket.onopen = () => {
-    //       logMessage("Connected to WebSocket");
-    //     };
-
-    //     socket.onmessage = (event) => {
-    //       const data = JSON.parse(event.data);
-    //       logMessage(JSON.stringify(data, null, 2));
-    //     };
-
-    //     socket.onerror = (error) => {
-    //       logMessage(`WebSocket Error: ${error}`);
-    //     };
-
-    //     socket.onclose = () => {
-    //       logMessage("WebSocket connection closed");
-    //     };
-
-    //     function logMessage(message) {
-    //       const messageElement = document.createElement("pre");
-    //       messageElement.textContent = message;
-    //       messageElement.classList.add("text-sm", "border-b", "py-1");
-    //       logElement.appendChild(messageElement);
-    //       logElement.scrollTop = logElement.scrollHeight;
-    //     }
-    //   }
     </script>
   </body>
 </html>

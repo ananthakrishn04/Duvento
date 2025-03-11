@@ -44,11 +44,6 @@ class BadgeSerializer(serializers.ModelSerializer):
         model = Badge
         fields = '__all__'
 
-# class CodingProfileSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = CodingProfile
-#         fields = ["username","email","display_name"]
-
 class CodingProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CodingProfile
@@ -67,15 +62,27 @@ class CodingProfileSerializer(serializers.ModelSerializer):
 #         }
 
 class CodingProblemSerializer(serializers.ModelSerializer):
+    difficulty = serializers.CharField(source='get_difficulty_display')
     class Meta:
         model = CodingProblem
-        fields = '__all__'
+        fields = ['id','title','description','difficulty','test_cases','time_limit','memory_limit','tags']
+
+# class SubmissionSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = Submission
+#         fields = '__all__'
+#         read_only_fields = ['status','execution_time','memory_usage']
 
 class SubmissionSerializer(serializers.ModelSerializer):
+    problem_id = serializers.IntegerField(write_only=True)
+    session_id = serializers.UUIDField(write_only=True)
+    
     class Meta:
         model = Submission
-        fields = ['code','language']
-
+        fields = ['id', 'status', 'execution_time', 'memory_usage', 'submitted_at', 
+                  'problem_id', 'session_id', 'code', 'language']
+        read_only_fields = ['profile', 'problem', 'status', 'execution_time', 'memory_usage', 'submitted_at']
+        
 class GameParticipationSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameParticipation

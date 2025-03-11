@@ -45,15 +45,64 @@
             padding: 10px;
             min-height: 100px;
         }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="left-panel">
+            
             <h2>Problem: <span id="problem-title"></span></h2>
             <div id="problem-description" class="problem-description"></div>
+
+            <div id="test-cases-container" class="p-4 border rounded">
+                <div id="test-cases-list">
+                </div>
+            </div>
+
+
+            <div style="padding: 1rem; background-color: #f9fafb; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <h2 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; color: #1f2937; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem;">Participants</h2>
+                
+                <ul style="list-style: none; padding: 0; margin: 0;">
+                    {% for participant in participants %}
+                        <li class="participant-item {% if winner == participant.display_name %}winner{% endif %}" 
+                            style="display: flex; align-items: center; padding: 0.5rem; margin-bottom: 0.5rem; border-radius: 0.25rem; transition: background-color 0.2s;" 
+                            onmouseover="this.style.backgroundColor='#f3f4f6'" 
+                            onmouseout="this.style.backgroundColor='{% if winner == participant.display_name %}#ecfdf5{% else %}transparent{% endif %}'">
+                            <div style="width: 2rem; height: 2rem; background-color: {% if winner == participant.display_name %}#10b981{% else %}#3b82f6{% endif %}; border-radius: 9999px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; margin-right: 0.75rem;">
+                                {{ participant.display_name|first|upper }}
+                            </div>
+                            <span style="color: {% if winner == participant.display_name %}#10b981{% else %}#374151{% endif %}; font-weight: {% if winner == participant.display_name %}600{% else %}normal{% endif %};">{{ participant }}</span>
+                        </li>
+                    {% endfor %}
+                </ul>
+                
+                {% if not participants %}
+                    <p style="color: #6b7280; font-style: italic; text-align: center; padding: 0.75rem 0;">No participants yet</p>
+                {% endif %}
+            </div>
+
+            <div id="leaderboard-container"></div>
+
         </div>
         <div class="right-panel">
+            <button 
+                onclick="window.location.href='http://localhost:8000'" 
+                style="
+                    padding: 10px 20px; 
+                    background-color: #3b82f6; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 5px; 
+                    cursor: pointer;
+                    font-size: 16px;"
+            >
+                Go to Home
+            </button>
+            
             <div class="language-selector">
                 <label for="language">Language:</label>
                 <select id="language">
@@ -76,12 +125,13 @@
     </div>
 
     <script>
-        // Get problem ID and session ID from URL
         const urlParams = new URLSearchParams(window.location.search);
         const problemId = urlParams.get('problem_id');
         const sessionId = urlParams.get('session_id');
         
-        // Initialize CodeMirror
+        const BASE_URL = "http://127.0.0.1:8000/api";
+
+        let currentWebSocket;
         const codeEditor = CodeMirror.fromTextArea(document.getElementById('code-area'), {
             lineNumbers: true,
             mode: 'python',
@@ -112,31 +162,43 @@
             codeEditor.setOption('mode', mode);
         });
 
-        // Fetch problem details
         fetch(`/api/sessions/${sessionId}/problems/`,{
             headers: {
                     "Content-Type": "application/json",
                     Authorization: `Token ${localStorage.getItem("authToken")}`,
             },  
-            })
-            .then(response => response.json())
-            .then(data => {
-                document.getElementById('problem-title').textContent = data[0].title;
-                document.getElementById('problem-description').innerHTML = data[0].description;
-            })
-            .catch(error => {
-                console.error('Error fetching problem details:', error);
-            });
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log(data)
+            document.getElementById('problem-title').textContent = data[0].title;
+            document.getElementById('problem-description').innerHTML = data[0].description;
 
-        // Submit button handler
+            const testCases = data[0].test_cases || [];
+
+            const testCasesList = document.getElementById('test-cases-list');
+
+            testCases.forEach((testCase, index) => {
+                const testCaseElement = document.createElement('div');
+                testCaseElement.className = 'test-case';
+                testCaseElement.innerHTML = `
+                    <p><strong>Test Case ${index + 1}:</strong></p>
+                    <p>Input: ${JSON.stringify(testCase.input)}</p>
+                    <p>Expected Output: ${JSON.stringify(testCase.expected_output)}</p>
+                    <hr>
+                `;
+                testCasesList.appendChild(testCaseElement);
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching problem details:', error);
+        });
+
+
         document.getElementById('submit-btn').addEventListener('click', function() {
             const code = codeEditor.getValue();
             const language = document.getElementById('language').value;
-            
-            // Show loading state
             document.getElementById('result').innerHTML = '<div>Processing submission...</div>';
-            
-            // Submit code to server
             fetch("/api/submissions/", {
                 method: "POST",
                 headers: {
@@ -155,17 +217,17 @@
             .then(data => {
                 // Display results
                 console.log(data)
-                if (data.error) {
+                if (data.result.error) {
                     document.getElementById('result').innerHTML = `
                         <h3>Error</h3>
                         <pre>${data.error}</pre>
                     `;
                 } else {
                     document.getElementById('result').innerHTML = `
-                        <h3>Status: ${data.status || 'Pending'}</h3>
-                        <div>Output: <pre>${data.output || 'No output'}</pre></div>
-                        <div>Execution Time: ${data.time || 'N/A'}</div>
-                        <div>Memory Usage: ${data.memory || 'N/A'}</div>
+                        <h3>Status: ${data.result.status || 'Pending'}</h3>
+                        <div>Output: <pre>${data.result.output || 'No output'}</pre></div>
+                        <div>Execution Time: ${data.result.time || 'N/A'}</div>
+                        <div>Memory Usage: ${data.result.memory || 'N/A'}</div>
                     `;
                 }
             })
@@ -176,6 +238,69 @@
                 `;
             });
         });
+
+        function initWebSocket(sessionId) {
+            const wsUrl = `ws://localhost:8000/ws/sessions/${sessionId}/`;
+            if (currentWebSocket) {
+            currentWebSocket.close();
+            }
+
+            currentWebSocket = new WebSocket(wsUrl);
+
+            currentWebSocket.onopen = () => {
+                console.log("Connected to WebSocket");
+            };
+
+            currentWebSocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                switch(data.type) {
+                    case 'session_end':
+                        window.winner = data.winner;
+                        document.querySelectorAll('.participant-item').forEach(el => {
+                            el.classList.remove('winner');
+                            el.onmouseout = function() { this.style.backgroundColor = 'transparent'; };
+                            el.querySelector('div').style.backgroundColor = '#3b82f6';
+                            el.querySelector('span').style.color = '#374151';
+                            el.querySelector('span').style.fontWeight = 'normal';
+                        });
+                        
+                        document.querySelectorAll('.participant-item').forEach(el => {
+                            const participantName = el.querySelector('span').textContent.trim();
+                            if (participantName === data.winner) {
+                                el.classList.add('winner');
+                                el.style.backgroundColor = '#ecfdf5';
+                                el.onmouseout = function() { this.style.backgroundColor = '#ecfdf5'; };
+                                el.querySelector('div').style.backgroundColor = '#10b981';
+                                el.querySelector('span').style.color = '#10b981';
+                                el.querySelector('span').style.fontWeight = '600';
+                            }
+                        });
+
+                        document.getElementById("submit-btn").disabled=true;
+                        document.getElementById("run-btn").disabled=true;
+                        document.getElementById('language').disabled=true;
+                        
+                        break;
+
+                    case 'leaderboard_status':
+                        handleAPIResponse(data.leaderboard);
+                        break;
+                }
+            };
+
+        currentWebSocket.onerror = (error) => {
+          console.log(`WebSocket Error: ${error}`);
+        };
+
+        currentWebSocket.onclose = () => {
+          console.log("WebSocket connection closed");
+        };
+
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        initWebSocket(sessionId);
+     });
 
         // Helper function to get CSRF token from cookies
         function getCookie(name) {
@@ -192,6 +317,229 @@
             }
             return cookieValue;
         }
+        
+        function handleAPIResponse(responseData) {
+            const leaderboardData = responseData;
+            leaderboardContainer = createLeaderboardStructure();
+            updateLeaderboard(leaderboardData);
+            if (responseData.submission) {
+                // updateSubmissionStatus(responseData.submission, responseData.result);
+            }
+        }
+
+        function createLeaderboardStructure() {
+            const container = document.getElementById("leaderboard-container");
+            container.className = 'leaderboard-container';
+            container.innerHTML = `
+                <div class="leaderboard-header">
+                <h1>Coding Competition Leaderboard</h1>
+                </div>
+                
+                <table class="leaderboard-table">
+                <thead>
+                    <tr>
+                    <th class="rank">Rank</th>
+                    <th>Participant</th>
+                    <th class="problems-solved">Problems Solved</th>
+                    <th class="time">Time</th>
+                    <th class="score">Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Leaderboard entries will be inserted here -->
+                </tbody>
+                </table>
+                
+                <div id="submission-status" class="submission-status hidden">
+                <!-- Submission status will be shown here -->
+                </div>
+            `;
+
+            addLeaderboardStyles();
+            
+            return container;
+            }
+
+            function addLeaderboardStyles() {
+                const styleElement = document.createElement('style');
+                styleElement.textContent = `
+                    .leaderboard-container {
+                        max-width: 800px;
+                        margin: 20px auto;
+                        background-color: #ffffff;
+                        border-radius: 8px;
+                        border: 1px solid #e0e0e0;
+                        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+                        overflow: hidden;
+                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    }
+
+                    .leaderboard-header {
+                        background-color: #f9fafb;
+                        color: #333333;
+                        padding: 16px;
+                        text-align: center;
+                        border-bottom: 1px solid #e5e7eb;
+                    }
+
+                    .leaderboard-header h1 {
+                        margin: 0;
+                        font-size: 20px;
+                        font-weight: 500;
+                    }
+
+                    .leaderboard-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                    }
+
+                    .leaderboard-table th {
+                        background-color: #fafafa;
+                        padding: 10px 12px;
+                        text-align: left;
+                        font-weight: 500;
+                        color: #374151;
+                        font-size: 14px;
+                        border-bottom: 1px solid #e5e7eb;
+                    }
+
+                    .leaderboard-table td {
+                        padding: 10px 12px;
+                        border-bottom: 1px solid #f3f4f6;
+                        font-size: 14px;
+                        color: #4b5563;
+                    }
+
+                    .leaderboard-table tr:last-child td {
+                        border-bottom: none;
+                    }
+
+                    .leaderboard-table tr:hover {
+                        background-color: #f9fafb;
+                    }
+
+                    .rank {
+                        font-weight: 500;
+                        text-align: center;
+                        width: 50px;
+                        color: #111827;
+                    }
+
+                    .username {
+                        font-weight: 500;
+                        color: #1f2937;
+                    }
+
+                    .highlight {
+                        background-color: #fefce8;
+                    }
+
+                    .problems-solved,
+                    .time,
+                    .score {
+                        text-align: center;
+                        color: #374151;
+                    }
+
+                    .profile-pic {
+                        width: 28px;
+                        height: 28px;
+                        border-radius: 50%;
+                        background-color: #e0e7ff;
+                        color: #3730a3;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        margin-right: 8px;
+                        font-size: 12px;
+                        font-weight: 600;
+                    }
+
+                    .user-cell {
+                        display: flex;
+                        align-items: center;
+                    }
+
+                    .submission-status {
+                        margin: 12px;
+                        padding: 12px;
+                        border-radius: 6px;
+                        font-size: 14px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                    }
+
+                    .status-accepted {
+                        background-color: #ecfdf5;
+                        color: #065f46;
+                        border: 1px solid #10b981;
+                    }
+
+                    .status-rejected {
+                        background-color: #fef2f2;
+                        color: #991b1b;
+                        border: 1px solid #ef4444;
+                    }
+
+                    .status-pending {
+                        background-color: #fffbeb;
+                        color: #92400e;
+                        border: 1px solid #f59e0b;
+                    }
+
+                    .hidden {
+                        display: none;
+                    }
+                `;
+                
+                document.head.appendChild(styleElement);
+            }
+
+
+            function updateLeaderboard(data) {
+                // Sort participants by problems solved (descending) and then by time (ascending)
+                data.sort((a, b) => {
+                    if (b.problems_solved !== a.problems_solved) {
+                    return b.problems_solved - a.problems_solved;
+                    }
+                    return a.total_time - b.total_time;
+                });
+                
+                // Get the table body
+                const tbody = document.querySelector('.leaderboard-table tbody');
+                
+                // Clear existing rows
+                tbody.innerHTML = '';
+                
+                // Add new rows
+                data.forEach((participant, index) => {
+                    const row = document.createElement('tr');
+                    
+                    // Create user's first initial for profile pic
+                    const initial = participant.username.charAt(0).toUpperCase();
+                    
+                    row.innerHTML = `
+                    <td class="rank">${index + 1}</td>
+                    <td class="username">
+                        <div class="user-cell">
+                        <div class="profile-pic">${initial}</div>
+                        ${participant.username}
+                        </div>
+                    </td>
+                    <td class="problems-solved">${participant.problems_solved}</td>
+                    <td class="time">${participant.formatted_time}</td>
+                    <td class="score">${participant.score}</td>
+                    `;
+                    
+                    // You could add a class to highlight the current user if needed
+                    // if (participant.username === currentUsername) {
+                    //   row.classList.add('highlight');
+                    // }
+                    
+                    tbody.appendChild(row);
+                });
+                }
     </script>
 </body>
 </html>

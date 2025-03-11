@@ -10,6 +10,7 @@ from rest_framework.decorators import api_view,action
 from rest_framework.permissions import IsAuthenticated,AllowAny
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
+import random
 
 from .models import GameSession, Badge, CodingProfile, CodingProblem, Submission, GameParticipation
 
@@ -27,6 +28,8 @@ from asgiref.sync import async_to_sync
 
 def mainView(request):
     return render(request,"coding-grounds-app.html")
+
+
 class BadgeView(viewsets.ModelViewSet):
     serializer_class = BadgeSerializer
     queryset = Badge.objects.all()
@@ -39,33 +42,210 @@ class CodingProblemView(viewsets.ModelViewSet):
     serializer_class = CodingProblemSerializer
     queryset = CodingProblem.objects.all()
 
+# class SubmissionView(viewsets.ModelViewSet):
+#     queryset = Submission.objects.all()
+#     serializer_class = SubmissionSerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def create(self, request, *args, **kwargs):
+#         request_data = request.data.copy()
+        
+#         serializer = self.get_serializer(data=request_data)
+#         serializer.is_valid(raise_exception=True)
+        
+#         profile = request.user.coding_profile
+#         problem_id = serializer.validated_data.get('problem_id')
+#         session_id = serializer.validated_data.get('session_id')
+#         code = serializer.validated_data.get('code')
+#         language = serializer.validated_data.get('language', 'python')
+        
+#         # Look up the problem and session
+#         problem = get_object_or_404(CodingProblem, id=problem_id)
+#         session = get_object_or_404(GameSession, id=session_id)
+        
+#         # Check permissions
+#         if not session.participants.filter(id=profile.id).exists():
+#             return Response({"detail": "Not a participant in this session"}, 
+#                         status=status.HTTP_403_FORBIDDEN)
+    
+#         if not session.is_active or session.end_time < timezone.now():
+#             return Response({"detail": "Session is not active"}, 
+#                         status=status.HTTP_400_BAD_REQUEST)
+        
+#         # Create the submission directly instead of using serializer.save()
+#         # This way we can provide the profile and problem objects directly
+#         submission = Submission.objects.create(
+#             profile=profile,
+#             problem=problem,
+#             code=code,
+#             language=language,
+#             game_session=session
+#         )
+
+#         # Run the code
+#         result = self.coderunner(code, language)
+
+#         # Update status based on result
+#         if result["error"]:
+#             submission.status = Submission.Status.WRONG_ANSWER
+#             submission.save()
+
+#             return Response({
+#                 'submission': serializer.data,
+#                 'result': result
+#             }, status=status.HTTP_201_CREATED)
+        
+#         else:
+#             submission.status = Submission.Status.ACCEPTED
+#             submission.save()
+
+#         self.notify_session_update(
+#                 session_id,
+#                 'end',
+#                 {
+#                     'type' : 'session_end',
+#                     'detail' : "session has ended",
+#                 }
+#             )
+
+#         participants_data = []
+        
+#         # Return a JSON response with the submission data and result
+#         # return Response({
+#         #     'submission': SubmissionSerializer(submission).data,
+#         #     'result': result,
+#         #     'redirect_url': reverse('game_session_status', kwargs={'session_id': session_id})
+#         # }, status=status.HTTP_201_CREATED)
+
+#         # if result["error"]:
+#         #     if "compilation" in result["error"].lower():
+#         #         submission.status = Submission.Status.COMPILATION_ERROR
+#         #     elif "runtime" in result["error"].lower():
+#         #         submission.status = Submission.Status.RUNTIME_ERROR
+#         #     else:
+#         #         submission.status = Submission.Status.WRONG_ANSWER
+
+#         # elif result["time"] and float(result["time"]) > problem.time_limit:
+#         #     submission.status = Submission.Status.TIME_LIMIT_EXCEEDED
+#         # elif result["memory"] and float(result["memory"]) > problem.memory_limit:
+#         #     submission.status = Submission.Status.MEMORY_LIMIT_EXCEEDED
+#         #     submission.status = Submission.Status.WRONG_ANSWER
+
+#         #     
+#         #     return Response({
+#         #     'submission': serializer.data,
+#         #     'result': result
+#         #     }, status=status.HTTP_201_CREATED)
+        
+#         # else:
+#         #     if self.validate_output(result["output"], problem.test_cases):
+#         #         submission.status = Submission.Status.ACCEPTED
+#         #     else:
+#         #         submission.status = Submission.Status.WRONG_ANSWER
+
+        
+
+#         return Response({
+#             'submission': serializer.data,
+#             'result': result
+#         }, status=status.HTTP_201_CREATED)
+
+#     def coderunner(self, source_code, language):
+#         # Judge0 API endpoint
+#         JUDGE0_API_URL = "http://192.168.1.8:2358"
+#         SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
+
+#         lanugageMap = {
+#             "python" : 71,
+#             "javascript" : 63,
+#             "java" : 62
+#         }
+
+#         # Prepare the request payload with CPU and memory limits
+#         data = {
+#             "source_code": source_code,
+#             "language_id": lanugageMap[language],
+#             "cpu_time_limit": 2,  # Max execution time in seconds
+#             "memory_limit": 128000,  # Max memory in KB (128MB)
+#         }
+
+#         # # Submit the code
+#         # response = requests.post(SUBMISSION_URL, json=data)
+#         # token = response.json().get("token")
+
+#         # if not token:
+#         #     print("Failed to get submission token.")
+#         #     exit()
+
+#         # # Fetch the result
+#         # RESULT_URL = f"{SUBMISSION_URL}/{token}"
+#         # while True:
+#         #     result = requests.get(RESULT_URL).json()
+#         #     if result["status"]["id"] in [1, 2]:  # Queued or Processing
+#         #         # time.sleep(1)
+#         #         pass
+#         #     else:
+#         #         break
+
+#         # Print the output
+#         # return {
+#         #     "output" : result.get("stdout", "No output"),
+#         #     "error" : result.get("stderr", "No errors"),
+#         #     "status" : result["status"]["description"],
+#         #     "time" : str(result["time"]) + "s",
+#         #     "memory" : str(result["memory"]) + "KB"
+#         # }
+
+#         return {
+#             "output" : "",
+#             "error" : None,
+#             "status" : "",
+#             "time" : "",
+#             "memory" : ""
+#         }
+#     def notify_session_update(self, session_id, event_type, data):
+#         channel_layer = get_channel_layer()
+#         group_name = f'session_{session_id}'
+#         async_to_sync(channel_layer.group_send)(
+#             group_name,
+#             {
+#                 'type': f'session_{event_type}',
+#                 'message': data
+#             }
+#         )
+
 class SubmissionView(viewsets.ModelViewSet):
     queryset = Submission.objects.all()
     serializer_class = SubmissionSerializer
     permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        profile = request.user.coding_profile
-        problem_id = request.data.get('problem_id')
-        session_id = request.data.get('session_id')
-        code = request.data.get('code')
-        language = request.data.get('language', 'python')
+        request_data = request.data.copy()
         
+        serializer = self.get_serializer(data=request_data)
+        serializer.is_valid(raise_exception=True)
+        
+        profile = request.user.coding_profile
+        problem_id = serializer.validated_data.get('problem_id')
+        session_id = serializer.validated_data.get('session_id')
+        code = serializer.validated_data.get('code')
+        language = serializer.validated_data.get('language', 'python')
+        
+        # Look up the problem and session
         problem = get_object_or_404(CodingProblem, id=problem_id)
         session = get_object_or_404(GameSession, id=session_id)
         
+        # Check permissions
         if not session.participants.filter(id=profile.id).exists():
             return Response({"detail": "Not a participant in this session"}, 
                         status=status.HTTP_403_FORBIDDEN)
     
-        if not session.is_active or session.end_time < timezone.now():
+        if not session.is_active or (session.end_time and session.end_time < timezone.now()):
             return Response({"detail": "Session is not active"}, 
                         status=status.HTTP_400_BAD_REQUEST)
         
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        submission = serializer.save(
+        # Create the submission
+        submission = Submission.objects.create(
             profile=profile,
             problem=problem,
             code=code,
@@ -73,11 +253,101 @@ class SubmissionView(viewsets.ModelViewSet):
             game_session=session
         )
 
+        # Run the code
         result = self.coderunner(code, language)
 
+        # Update submission status based on result
+        if result["error"]:
+            submission.status = Submission.Status.WRONG_ANSWER
+        else:
+            submission.status = Submission.Status.ACCEPTED
+            
+            # Get the participation record
+            participation = GameParticipation.objects.get(
+                game_session=session,
+                profile=profile
+            )
+            
+            # Check if this is the first time this user solved this problem in this session
+            previous_accepted = Submission.objects.filter(
+                profile=profile,
+                problem=problem,
+                game_session=session,
+                status=Submission.Status.ACCEPTED
+            ).exclude(pk=submission.pk).exists()
+            
+            if not previous_accepted:
+                # Update participation statistics
+                participation.problems_solved += 1
+                
+                # Calculate time since session start
+                time_delta = submission.submitted_at - session.start_time
+                seconds = int(time_delta.total_seconds())
+                
+                # Add to total time (used for tie-breaking)
+                participation.total_time += seconds
+                participation.save()
+                
+                # If all problems are solved, update leaderboard
+                session_problems_count = session.problems.count()
+                if participation.problems_solved >= session_problems_count:
+                    # Check if this is the first participant to solve all problems
+                    all_solved_count = GameParticipation.objects.filter(
+                        game_session=session,
+                        problems_solved__gte=session_problems_count
+                    ).count()
+                    
+                    # If this is the first participant to solve all problems, end the session
+                    if all_solved_count == 1:
+                        session.end_session()
+                        # Notify all participants of session end
+                        self.notify_session_update(
+                            session_id,
+                            'end',
+                            {
+                                'type': 'session_end',
+                                'detail': "Session has ended - all problems solved!",
+                                'winner': profile.display_name
+                            }
+                        )  
+                        
+        # Save the updated submission
+        submission.save()
+        
+        # Update user profile
+        profile.update_streak()
+        
+        # Prepare participants data for leaderboard
+        participants_data = []
+        for participation in session.participations.all().order_by('-problems_solved', 'total_time'):
+            minutes, seconds = divmod(participation.total_time, 60)
+            formatted_time = f"{minutes:02d}:{seconds:02d}"
+            
+            # Create serializable participant data
+            participant_data = {
+                'profile_id': participation.profile.id,
+                'username': participation.profile.display_name,
+                'problems_solved': participation.problems_solved,
+                'total_time': participation.total_time,
+                'formatted_time': formatted_time,
+                'score': participation.score
+            }
+            participants_data.append(participant_data)
+        
+        # Notify all participants of leaderboard update
+        self.notify_session_update(
+            session_id,
+            'leaderboard',
+            {
+                'type': 'leaderboard_status',
+                'leaderboard': participants_data
+            }
+        )
+
         return Response({
-            'submission': serializer.data,
-            'result': result
+            'submission': SubmissionSerializer(submission).data,
+            'result': result,
+            'leaderboard': participants_data
         }, status=status.HTTP_201_CREATED)
 
     def coderunner(self, source_code, language):
@@ -85,54 +355,41 @@ class SubmissionView(viewsets.ModelViewSet):
         JUDGE0_API_URL = "http://192.168.1.8:2358"
         SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
 
-        lanugageMap = {
-            "python" : 71,
-            "javascript" : 63,
-            "java" : 62
+        languageMap = {
+            "python": 71,
+            "javascript": 63,
+            "java": 62
         }
 
         # Prepare the request payload with CPU and memory limits
         data = {
             "source_code": source_code,
-            "language_id": lanugageMap[language],
+            "language_id": languageMap[language],
             "cpu_time_limit": 2,  # Max execution time in seconds
             "memory_limit": 128000,  # Max memory in KB (128MB)
         }
 
-        # # Submit the code
-        # response = requests.post(SUBMISSION_URL, json=data)
-        # token = response.json().get("token")
-
-        # if not token:
-        #     print("Failed to get submission token.")
-        #     exit()
-
-        # # Fetch the result
-        # RESULT_URL = f"{SUBMISSION_URL}/{token}"
-        # while True:
-        #     result = requests.get(RESULT_URL).json()
-        #     if result["status"]["id"] in [1, 2]:  # Queued or Processing
-        #         # time.sleep(1)
-        #         pass
-        #     else:
-        #         break
-
-        # Print the output
-        # return {
-        #     "output" : result.get("stdout", "No output"),
-        #     "error" : result.get("stderr", "No errors"),
-        #     "status" : result["status"]["description"],
-        #     "time" : str(result["time"]) + "s",
-        #     "memory" : str(result["memory"]) + "KB"
-        # }
+        # Your existing code runner implementation here
+        # For now, we'll use your placeholder response
 
         return {
-            "output" : "",
-            "error" : "",
-            "status" : "",
-            "time" : "",
-            "memory" : ""
+            "output": "",
+            "error": None,
+            "status": "Accepted",
+            "time": "0.3 s",
+            "memory": "100 KB"
         }
+
+    def notify_session_update(self, session_id, event_type, data):
+        channel_layer = get_channel_layer()
+        group_name = f'session_{session_id}'
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                'type': f'session_{event_type}',
+                'message': data
+            }
+        )
 
 
 class GameSessionView(viewsets.ModelViewSet):
@@ -141,10 +398,28 @@ class GameSessionView(viewsets.ModelViewSet):
     serializer_class = GameSessionSerializer
     permission_classes = [IsAuthenticated]
     
-    def perform_create(self, serializer):
-        profile = self.request.user.coding_profile
-        session = serializer.save(created_by=profile)
+    def create(self, request, *args, **kwargs):
+        profile = request.user.coding_profile
+
+        # serializer = self.get_serializer(data=request.data)
+
+        # session = serializer.save(created_by=profile)
+
+        session = GameSession.objects.create(
+            title = request.data.get("title"),
+            is_private = request.data.get("is_private"),
+            max_participants = request.data.get("max_participants"),
+            access_code = request.data.get("access_code" , ""),
+            created_by = profile
+        )
+
+        problem = random.choice(list(CodingProblem.objects.all()))
+        session.problems.add(problem)
         session.add_participant(profile)
+        session.save()
+
+        return Response({"id": session.id,"detail" : "session created successfully"})
+    
     
     @action(detail=True, methods=['post'])
     def join(self, request, pk=None):
@@ -261,6 +536,10 @@ class GameSessionView(viewsets.ModelViewSet):
             return Response({"detail": "Not all participants are ready"}, 
                            status=status.HTTP_400_BAD_REQUEST)
         
+        problems = list(session.problems.all())
+
+        editor_url = f"/editor?problem_id={problems[0].id}&session_id={session.id}"
+
         # Start the session
         if session.start_if_ready():
             self.notify_session_update(
@@ -268,20 +547,12 @@ class GameSessionView(viewsets.ModelViewSet):
                 'start',
                 {
                     'type': 'start',
-                    'detail' : 'session_started'
+                    'detail' : 'session_started',
+                    'redirect_url': editor_url
                 }
             )
-            problems = list(session.problems.all())
-            # list(GameParticipation.objects.filter(game_session=session).values(
-            # 'profile__id', 
-            # 'profile__display_name',  
-            # 'is_ready'
-            # ))
 
-
-            editor_url = f"/editor?problem_id={problems[0].id}&session_id={session.id}"
-
-            return Response({"status":"started","detail": "Session started successfully","redirect_url":editor_url}, 
+            return Response({"status":"started","detail": "Session started successfully"}, 
                             status=status.HTTP_200_OK)
         else:
             return Response({"detail": "Unable to start session"}, 
@@ -312,10 +583,56 @@ class GameSessionView(viewsets.ModelViewSet):
     def leaderboard(self, request, pk=None):
         """Get leaderboard for this session"""
         session = self.get_object()
+
+        user_profile = request.user.coding_profile
+        is_participant = session.participants.filter(id=user_profile.id).exists()
+        is_creator = session.created_by == user_profile
         
-        participations = session.participations.all()
-        serializer = GameParticipationSerializer(participations, many=True)
-        return Response(serializer.data)
+        if not (is_participant or is_creator):
+            return render(request, 'error.html', {
+                'message': 'You do not have permission to view this session.'
+            })
+        
+        participants_data = []
+        
+        for participation in session.participations.all().order_by('-problems_solved', 'total_time'):
+            # Get the last submission for this participant in this session
+            last_submission = Submission.objects.filter(
+                profile=participation.profile,
+                game_session=session
+            ).order_by('-submitted_at').first()
+            
+            # Format time for display (convert seconds to MM:SS format)
+            minutes, seconds = divmod(participation.total_time, 60)
+            formatted_time = f"{minutes:02d}:{seconds:02d}"
+            
+            participants_data.append({
+                'profile_id': participation.profile.id,
+                'username': participation.profile.display_name,
+                'problems_solved': participation.problems_solved,
+                'total_time': participation.total_time,
+                'formatted_time': formatted_time,
+                'minutes_taken': minutes,
+                'seconds_taken': seconds,
+                'final_rank': participation.final_rank,
+                'score': participation.score,
+                'is_ready': participation.is_ready,
+            })
+        
+        self.notify_session_update(
+            session.id,
+            'leaderboard',
+            {
+                'type' : 'leaderboard_status',
+                'participant_status' : participants_data
+            }
+        )
+
+        context = {
+            'participants_data' : participants_data
+        }
+
+        return render(request, 'game_status.html', context)
     
     def notify_session_update(self, session_id, event_type, data):
         channel_layer = get_channel_layer()
@@ -544,4 +861,5 @@ def code_editor_view(request):
     return render(request, 'code_editor_new.html', {
         'problem': problem,
         'session': session,
+        'participants' : session.participants.all()
     })

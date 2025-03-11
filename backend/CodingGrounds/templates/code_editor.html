@@ -27,6 +27,8 @@
     <button onclick="submitCode()">Submit</button>
 
     <script>
+        const BASE_URL = "http://127.0.0.1:8000/api";
+        
         // Initialize CodeMirror
         var editor = CodeMirror.fromTextArea(document.getElementById("codeEditor"), {
             lineNumbers: true,

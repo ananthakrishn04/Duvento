@@ -77,13 +77,19 @@ class GameSessionConsumer(AsyncWebsocketConsumer):
         
     async def session_submission(self, event):
         await self.send(text_data=json.dumps(event['message']))
+    
+    async def session_end(self, event):
+        await self.send(text_data=json.dumps(event['message']))
+
+    async def session_leaderboard(self,event):
+        await self.send(text_data=json.dumps(event['message']))
         
     async def session_chat(self, event):
         await self.send(text_data=json.dumps(event['message']))
 
     async def session_participant_update(self, event):
         await self.send(text_data=json.dumps(event['message']))
-        
+
 class SimpleTestConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         logger.info("Connection attempt started")

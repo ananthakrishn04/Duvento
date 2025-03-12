@@ -102,7 +102,7 @@
             >
                 Go to Home
             </button>
-            
+
             <div class="language-selector">
                 <label for="language">Language:</label>
                 <select id="language">
@@ -162,7 +162,7 @@
             codeEditor.setOption('mode', mode);
         });
 
-        fetch(`/api/sessions/${sessionId}/problems/`,{
+        fetch(`${BASE_URL}/sessions/${sessionId}/problems/`,{
             headers: {
                     "Content-Type": "application/json",
                     Authorization: `Token ${localStorage.getItem("authToken")}`,
@@ -203,14 +203,60 @@
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "X-CSRFToken": getCookie('csrftoken'),
+                    // "X-CSRFToken": getCookie('csrftoken'),
                     Authorization: `Token ${localStorage.getItem("authToken")}`,
                 },
                 body: JSON.stringify({
                     problem_id: problemId,
                     session_id: sessionId,
                     code: code,
-                    language: language
+                    language: language,
+                    submit: true
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Display results
+                console.log(data)
+                if (data.result.error) {
+                    document.getElementById('result').innerHTML = `
+                        <h3>Error</h3>
+                        <pre>${data.error}</pre>
+                    `;
+                } else {
+                    document.getElementById('result').innerHTML = `
+                        <h3>Status: ${data.result.status || 'Pending'}</h3>
+                        <div>Output: <pre>${data.result.output || 'No output'}</pre></div>
+                        <div>Execution Time: ${data.result.time || 'N/A'}</div>
+                        <div>Memory Usage: ${data.result.memory || 'N/A'}</div>
+                    `;
+                }
+            })
+            .catch(error => {
+                document.getElementById('result').innerHTML = `
+                    <h3>Error</h3>
+                    <pre>Failed to submit: ${error.message}</pre>
+                `;
+            });
+        });
+
+        document.getElementById('run-btn').addEventListener('click', function() {
+            const code = codeEditor.getValue();
+            const language = document.getElementById('language').value;
+            document.getElementById('result').innerHTML = '<div>Processing submission...</div>';
+            fetch("/api/submissions/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    // "X-CSRFToken": getCookie('csrftoken'),
+                    Authorization: `Token ${localStorage.getItem("authToken")}`,
+                },
+                body: JSON.stringify({
+                    problem_id: problemId,
+                    session_id: sessionId,
+                    code: code,
+                    language: language,
+                    submit : false
                 })
             })
             .then(response => response.json())
@@ -303,20 +349,20 @@
      });
 
         // Helper function to get CSRF token from cookies
-        function getCookie(name) {
-            let cookieValue = null;
-            if (document.cookie && document.cookie !== '') {
-                const cookies = document.cookie.split(';');
-                for (let i = 0; i < cookies.length; i++) {
-                    const cookie = cookies[i].trim();
-                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                        break;
-                    }
-                }
-            }
-            return cookieValue;
-        }
+        // function getCookie(name) {
+        //     let cookieValue = null;
+        //     if (document.cookie && document.cookie !== '') {
+        //         const cookies = document.cookie.split(';');
+        //         for (let i = 0; i < cookies.length; i++) {
+        //             const cookie = cookies[i].trim();
+        //             if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        //                 cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        //                 break;
+        //             }
+        //         }
+        //     }
+        //     return cookieValue;
+        // }
         
         function handleAPIResponse(responseData) {
             const leaderboardData = responseData;

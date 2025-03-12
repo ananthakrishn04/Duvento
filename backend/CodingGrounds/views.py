@@ -2,6 +2,9 @@ from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 
+import requests
+import time
+
 # Create your views here.
 from rest_framework import viewsets,status
 from rest_framework.views import APIView
@@ -252,64 +255,69 @@ class SubmissionView(viewsets.ModelViewSet):
             language=language,
             game_session=session
         )
+        test_cases = ["5\n2 7 11 15 1\n9\n", "4\n3 2 4 6\n6\n"]
+        expected_outputs = ["[2, 7]\n", "[3, 3]\n"]
+
 
         # Run the code
-        result = self.coderunner(code, language)
+        result = self.coderunner(code, language, test_cases, expected_outputs)
 
         # Update submission status based on result
-        if result["error"]:
-            submission.status = Submission.Status.WRONG_ANSWER
-        else:
-            submission.status = Submission.Status.ACCEPTED
-            
-            # Get the participation record
-            participation = GameParticipation.objects.get(
-                game_session=session,
-                profile=profile
-            )
-            
-            # Check if this is the first time this user solved this problem in this session
-            previous_accepted = Submission.objects.filter(
-                profile=profile,
-                problem=problem,
-                game_session=session,
-                status=Submission.Status.ACCEPTED
-            ).exclude(pk=submission.pk).exists()
-            
-            if not previous_accepted:
-                # Update participation statistics
-                participation.problems_solved += 1
+
+        if serializer.validated_data.get('submit'):
+            if result[0]["status"] == "Wrong Answer":
+                submission.status = Submission.Status.WRONG_ANSWER
+            else:
+                submission.status = Submission.Status.ACCEPTED
                 
-                # Calculate time since session start
-                time_delta = submission.submitted_at - session.start_time
-                seconds = int(time_delta.total_seconds())
+                # Get the participation record
+                participation = GameParticipation.objects.get(
+                    game_session=session,
+                    profile=profile
+                )
                 
-                # Add to total time (used for tie-breaking)
-                participation.total_time += seconds
-                participation.save()
+                # Check if this is the first time this user solved this problem in this session
+                previous_accepted = Submission.objects.filter(
+                    profile=profile,
+                    problem=problem,
+                    game_session=session,
+                    status=Submission.Status.ACCEPTED
+                ).exclude(pk=submission.pk).exists()
                 
-                # If all problems are solved, update leaderboard
-                session_problems_count = session.problems.count()
-                if participation.problems_solved >= session_problems_count:
-                    # Check if this is the first participant to solve all problems
-                    all_solved_count = GameParticipation.objects.filter(
-                        game_session=session,
-                        problems_solved__gte=session_problems_count
-                    ).count()
+                if not previous_accepted:
+                    # Update participation statistics
+                    participation.problems_solved += 1
                     
-                    # If this is the first participant to solve all problems, end the session
-                    if all_solved_count == 1:
-                        session.end_session()
-                        # Notify all participants of session end
-                        self.notify_session_update(
-                            session_id,
-                            'end',
-                            {
-                                'type': 'session_end',
-                                'detail': "Session has ended - all problems solved!",
-                                'winner': profile.display_name
-                            }
-                        )  
+                    # Calculate time since session start
+                    time_delta = submission.submitted_at - session.start_time
+                    seconds = int(time_delta.total_seconds())
+                    
+                    # Add to total time (used for tie-breaking)
+                    participation.total_time += seconds
+                    participation.save()
+                    
+                    # If all problems are solved, update leaderboard
+                    session_problems_count = session.problems.count()
+                    if participation.problems_solved >= session_problems_count:
+                        # Check if this is the first participant to solve all problems
+                        all_solved_count = GameParticipation.objects.filter(
+                            game_session=session,
+                            problems_solved__gte=session_problems_count
+                        ).count()
+                        
+                        # If this is the first participant to solve all problems, end the session
+                        if all_solved_count == 1:
+                            session.end_session()
+                            # Notify all participants of session end
+                            self.notify_session_update(
+                                session_id,
+                                'end',
+                                {
+                                    'type': 'session_end',
+                                    'detail': "Session has ended - all problems solved!",
+                                    'winner': profile.display_name
+                                }
+                            )  
                         
         # Save the updated submission
         submission.save()
@@ -335,50 +343,126 @@ class SubmissionView(viewsets.ModelViewSet):
             participants_data.append(participant_data)
         
         # Notify all participants of leaderboard update
-        self.notify_session_update(
-            session_id,
-            'leaderboard',
-            {
-                'type': 'leaderboard_status',
-                'leaderboard': participants_data
-            }
-        )
+
+        if result[0]["status"] != "Wrong Answer":
+            self.notify_session_update(
+                session_id,
+                'leaderboard',
+                {
+                    'type': 'leaderboard_status',
+                    'leaderboard': participants_data
+                }
+            )
 
         return Response({
             'submission': SubmissionSerializer(submission).data,
-            'result': result,
+            'result': result[0],
             'leaderboard': participants_data
-        }, status=status.HTTP_201_CREATED)
-
-    def coderunner(self, source_code, language):
+        }, status=status.HTTP_201_CREATED)              
+    
+    def coderunner(self, source_code, language, test_cases, expected_outputs):
         # Judge0 API endpoint
-        JUDGE0_API_URL = "http://192.168.1.8:2358"
+        JUDGE0_API_URL = "http://localhost:2358"
         SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
 
+        # Language ID Mapping
         languageMap = {
             "python": 71,
             "javascript": 63,
             "java": 62
         }
 
-        # Prepare the request payload with CPU and memory limits
-        data = {
-            "source_code": source_code,
-            "language_id": languageMap[language],
-            "cpu_time_limit": 2,  # Max execution time in seconds
-            "memory_limit": 128000,  # Max memory in KB (128MB)
-        }
+        final_results = []
 
-        # Your existing code runner implementation here
-        # For now, we'll use your placeholder response
+        for i, test_case in enumerate(test_cases):
+            # Prepare the request payload
+            data = {
+                "source_code": source_code,
+                "language_id": languageMap[language],
+                "stdin": test_case,
+                "expected_output": expected_outputs[i],  # Include expected output
+                "cpu_time_limit": 2,
+                "memory_limit": 128000
+            }
 
-        return {
-            "output": "",
-            "error": None,
-            "status": "Accepted",
-            "time": "0.3 s",
-            "memory": "100 KB"
-        }
+            # Submit the code
+            response = requests.post(SUBMISSION_URL, json=data)
+            token = response.json().get("token")
+
+            if not token:
+                final_results.append({"test_case": i + 1, "error": "Failed to get submission token."})
+                continue
+
+            # Fetch the result
+            RESULT_URL = f"{SUBMISSION_URL}/{token}"
+            while True:
+                result = requests.get(RESULT_URL).json()
+                if result["status"]["id"] not in [1, 2]:  # Not Queued/Processing
+                    break
+                time.sleep(1)
+
+            # Store results
+            final_results.append({
+                "test_case": i + 1,
+                "output": result.get("stdout", "No output"),
+                "expected": expected_outputs[i],
+                "match": result.get("stdout", "") == expected_outputs[i],
+                "error": result.get("stderr", None),
+                "status": result["status"]["description"],
+                "time": f"{result.get('time', '0')}s",
+                "memory": f"{result.get('memory', '0')}KB"
+            })
+
+        return final_results
+
+
+# # Read the Python code from a file
+# with open("source_code.py", "r") as file:
+#     source_code = file.read()
+
+# test_cases = ["5\n2 7 11 15 1\n9\n", "4\n3 2 4 6\n6\n"]
+# expected_outputs = ["[0, 1]\n", "[1, 2]\n"]
+
+# results = coderunner(source_code, "python", test_cases, expected_outputs)
+
+# for res in results:
+#     print(f"Test Case {res['test_case']}:")
+#     print("Output:", res["output"])
+#     print("Expected:", res["expected"])
+#     print("Match:", "✅" if res["match"] else "❌")
+#     print("=" * 30)
+
+
+
+    # def coderunner(self, source_code, language):
+    #     # Judge0 API endpoint
+    #     JUDGE0_API_URL = "http://192.168.1.8:2358"
+    #     SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
+
+    #     languageMap = {
+    #         "python": 71,
+    #         "javascript": 63,
+    #         "java": 62
+    #     }
+
+    #     # Prepare the request payload with CPU and memory limits
+    #     data = {
+    #         "source_code": source_code,
+    #         "language_id": languageMap[language],
+    #         "cpu_time_limit": 2,  # Max execution time in seconds
+    #         "memory_limit": 128000,  # Max memory in KB (128MB)
+    #     }
+
+    #     # Your existing code runner implementation here
+    #     # For now, we'll use your placeholder response
+
+    #     return {
+    #         "output": "",
+    #         "error": None,
+    #         "status": "Accepted",
+    #         "time": "0.3 s",
+    #         "memory": "100 KB"
+    #     }
 
     def notify_session_update(self, session_id, event_type, data):
         channel_layer = get_channel_layer()
@@ -390,7 +474,6 @@ class SubmissionView(viewsets.ModelViewSet):
                 'message': data
             }
         )
-
 
 class GameSessionView(viewsets.ModelViewSet):
     # serializer_class = GameSessionSerializer
@@ -418,7 +501,7 @@ class GameSessionView(viewsets.ModelViewSet):
         session.add_participant(profile)
         session.save()
 
-        return Response({"id": session.id,"detail" : "session created successfully"})
+        return Response({"id": session.id,"is_private":request.data.get("is_private"),"title":request.data.get("title"),"detail" : "session created successfully"})
     
     
     @action(detail=True, methods=['post'])

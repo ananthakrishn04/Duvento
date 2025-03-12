@@ -76,13 +76,14 @@ class CodingProblemSerializer(serializers.ModelSerializer):
 class SubmissionSerializer(serializers.ModelSerializer):
     problem_id = serializers.IntegerField(write_only=True)
     session_id = serializers.UUIDField(write_only=True)
+    submit = serializers.BooleanField(write_only=True)
     
     class Meta:
         model = Submission
         fields = ['id', 'status', 'execution_time', 'memory_usage', 'submitted_at', 
-                  'problem_id', 'session_id', 'code', 'language']
+                  'problem_id', 'session_id', 'code', 'language','submit']
         read_only_fields = ['profile', 'problem', 'status', 'execution_time', 'memory_usage', 'submitted_at']
-        
+
 class GameParticipationSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameParticipation

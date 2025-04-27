@@ -32,13 +32,25 @@ class CodingProfileSerializer(serializers.ModelSerializer):
             'id', 'rating', 'problems_solved', 'rank', 
             'streak', 'joined_at', 'last_activity'
         ]
-
+    def validate_username(self, value):
+        if User.objects.filter(username=value).exists():
+            raise serializers.ValidationError("This username is already in use.")
+        return value
+    
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("This email address is already registered.")
+        return value
+    
     def create(self, validated_data):
         # Extract user data
         username = validated_data.pop('username')
         password = validated_data.pop('password')
         email = validated_data.pop('email')
         
+        if 'display_name' not in validated_data or not validated_data['display_name']:
+            validated_data['display_name'] = username
+            
         # Create user
         user = User.objects.create_user(
             username=username,

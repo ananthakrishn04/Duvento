@@ -138,7 +138,7 @@ class Submission(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.profile.username}'s submission for {self.problem.title}"
+        return f"{self.profile.user.username}'s submission for {self.problem.title}"
     
     def save(self, *args, **kwargs):
         # If this is a new successful submission
@@ -312,4 +312,4 @@ class GameParticipation(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.profile.username} in {self.game_session.title}"
+        return f"{self.profile.user.username} in {self.game_session.title}"

@@ -23,8 +23,6 @@ class CodingProfile(models.Model):
         null=True,  # Allow null initially when profile is created before user
         blank=True
     )
-    username = models.CharField(max_length=150, unique=True)
-    email = models.EmailField(unique=True)
     display_name = models.CharField(max_length=200)
     rating = models.IntegerField(default=1500)
     problems_solved = models.IntegerField(default=0)
@@ -40,24 +38,11 @@ class CodingProfile(models.Model):
         ordering = ['-rating']
         indexes = [
             models.Index(fields=['-rating']),
-            models.Index(fields=['username']),
+            models.Index(fields=['user']),
         ]
 
     def __str__(self):
-        return self.username
-    
-    def create_auth_user(self, password):
-        """Create the associated auth User model"""
-        if not self.user:
-            user = User.objects.create_user(
-                username=self.username,
-                email=self.email,
-                password=password
-            )
-            self.user = user
-            self.save()
-            return user
-        return self.user
+        return self.user.username
 
     def update_streak(self):
         """Update the user's streak based on submissions"""

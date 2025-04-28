@@ -1,6 +1,7 @@
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
+from django.conf import settings
 
 import requests
 import time
@@ -456,47 +457,62 @@ class SolveProblemView(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post']  # Allow GET and POST for Swagger visibility
 
-    def coderunner(self, source_code, language, test_cases):
-        # Dummy implementation for testing
-
-        status_choices = [
-            Submission.Status.PENDING,
-            Submission.Status.ACCEPTED,
-            Submission.Status.WRONG_ANSWER,
-            Submission.Status.TIME_LIMIT_EXCEEDED,
-            Submission.Status.MEMORY_LIMIT_EXCEEDED,
-            Submission.Status.RUNTIME_ERROR,
-            Submission.Status.COMPILATION_ERROR
-        ]
-
-        final_results = []
-        for i, test_case in enumerate(test_cases):
-            # Randomly select a status
-            status = random.choice(status_choices)
+    def coderunner(self, source_code, language, test_cases, time_limit=2.0, memory_limit=128):
+        """
+        Send code to the execution service and get results
+        """
+        try:
+            # Get code execution service URL from settings or use default
+            code_execution_url = getattr(settings, 'CODE_EXECUTION_URL', 'http://localhost:8000')
             
-            # Generate dummy output based on status
-            if status == Submission.Status.ACCEPTED:
-                output = json.dumps(test_case['expected_output'])
-                error = None
+            # Prepare the request payload
+            payload = {
+                "source_code": source_code,
+                "language": language,
+                "test_cases": test_cases,
+                "time_limit": time_limit,
+                "memory_limit": memory_limit
+            }
+            
+            # Send the request to the code execution service
+            response = requests.post(
+                f"{code_execution_url}/execute",
+                json=payload,
+                timeout=30  # Reasonable timeout for code execution
+            )
+            
+            # Check if the request was successful
+            if response.status_code == 200:
+                result_data = response.json()
+                return result_data["results"]
             else:
-                output = "No output"
-                error = "Dummy error message" if status in [
-                    Submission.Status.RUNTIME_ERROR,
-                    Submission.Status.COMPILATION_ERROR
-                ] else None
-
-            final_results.append({
-                "test_case": i + 1,
-                "output": output,
-                "expected": json.dumps(test_case['expected_output']),
-                "match": status == Submission.Status.ACCEPTED,
-                "error": error,
-                "status": status,
-                "time": f"{random.uniform(0.1, 2.0):.2f}s",
-                "memory": f"{random.randint(100, 1000)}KB"
-            })
-
-        return final_results
+                # Log the error
+                print(f"Code execution service error: {response.status_code} - {response.text}")
+                # Return a generic error
+                return [{
+                    "test_case": 1,
+                    "output": "",
+                    "expected": "",
+                    "match": False,
+                    "error": f"Code execution service error: {response.status_code}",
+                    "status": Submission.Status.RUNTIME_ERROR,
+                    "time": "0.00s",
+                    "memory": "0MB"
+                }]
+                
+        except requests.RequestException as e:
+            # Handle connection errors
+            print(f"Connection error: {str(e)}")
+            return [{
+                "test_case": 1,
+                "output": "",
+                "expected": "",
+                "match": False,
+                "error": f"Connection error: {str(e)}",
+                "status": Submission.Status.RUNTIME_ERROR,
+                "time": "0.00s",
+                "memory": "0MB"
+            }]
 
     def list(self, request):
         """List all problems available for solving"""
@@ -550,22 +566,18 @@ class SolveProblemView(viewsets.ModelViewSet):
             game_session=session
         )
         
-        # # Run the code
-        # result = self.coderunner(
-        #     submission.code, 
-        #     submission.language, 
-        #     problem.test_cases
-        # )
-        
-        # Dummy result with all test cases passing
-        result = [
-            {'status': Submission.Status.ACCEPTED, 'output': 'Test case 1 passed'},
-            {'status': Submission.Status.ACCEPTED, 'output': 'Test case 2 passed'},
-            {'status': Submission.Status.ACCEPTED, 'output': 'Test case 3 passed'}
-        ]
+        # Run the code using our real coderunner
+        result = self.coderunner(
+            submission.code, 
+            submission.language, 
+            problem.test_cases,
+            problem.time_limit,
+            problem.memory_limit
+        )
 
         # Update submission status based on result
-        if all(r['status'] == Submission.Status.ACCEPTED for r in result):
+        all_accepted = all(r['status'] == Submission.Status.ACCEPTED for r in result)
+        if all_accepted:
             submission.status = Submission.Status.ACCEPTED
             
             # Get the participation record
@@ -611,7 +623,17 @@ class SolveProblemView(viewsets.ModelViewSet):
                     }
                 )
         else:
-            submission.status = Submission.Status.WRONG_ANSWER
+            # Determine the status based on the results
+            if any(r['status'] == Submission.Status.COMPILATION_ERROR for r in result):
+                submission.status = Submission.Status.COMPILATION_ERROR
+            elif any(r['status'] == Submission.Status.RUNTIME_ERROR for r in result):
+                submission.status = Submission.Status.RUNTIME_ERROR
+            elif any(r['status'] == Submission.Status.TIME_LIMIT_EXCEEDED for r in result):
+                submission.status = Submission.Status.TIME_LIMIT_EXCEEDED
+            elif any(r['status'] == Submission.Status.MEMORY_LIMIT_EXCEEDED for r in result):
+                submission.status = Submission.Status.MEMORY_LIMIT_EXCEEDED
+            else:
+                submission.status = Submission.Status.WRONG_ANSWER
         
         # Save the updated submission
         submission.save()

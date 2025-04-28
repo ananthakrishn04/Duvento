@@ -648,25 +648,3 @@ def current_user(request):
         {"detail": "Not authenticated"}, 
         status=status.HTTP_401_UNAUTHORIZED
     )
-
-# @api_view(['GET'])
-# def code_editor_view(request):
-#     problem_id = request.GET.get('problem_id')
-#     session_id = request.GET.get('session_id')
-
-#     if not problem_id or not session_id:
-#         return HttpResponse("Problem ID and Session ID are required", status=400)
-
-#     # Check if problem and session exist
-#     try:
-#         problem = CodingProblem.objects.get(id=problem_id)
-#         session = GameSession.objects.get(id=session_id)
-#     except (CodingProblem.DoesNotExist, GameSession.DoesNotExist):
-#         return HttpResponse("Problem or Session not found", status=404)
-
-#     # Return the code editor template
-#     return render(request, 'code_editor_new.html', {
-#         'problem': problem,
-#         'session': session,
-#         'participants' : session.participants.all()
-#     })

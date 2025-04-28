@@ -20,11 +20,12 @@ class CodingProfileSerializer(serializers.ModelSerializer):
     user = UserSerializer(read_only=True)
     username = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True)
+    email = serializers.CharField(write_only=True)
     
     class Meta:
         model = CodingProfile
         fields = [
-            'id', 'user', 'username', 'password', 'display_name', 'email', 'rating', 
+            'id', 'user', 'username', 'password', 'display_name','email','rating', 
             'problems_solved', 'rank', 'bio', 'avatar', 'streak', 
             'joined_at', 'last_activity'
         ]
@@ -50,7 +51,7 @@ class CodingProfileSerializer(serializers.ModelSerializer):
         
         if 'display_name' not in validated_data or not validated_data['display_name']:
             validated_data['display_name'] = username
-            
+        
         # Create user
         user = User.objects.create_user(
             username=username,

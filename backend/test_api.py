@@ -60,17 +60,34 @@ def test_sessions(token):
     session_id = response.json().get('id')
     
     # Join session
-    print("2. Join session")
+    print("2. Leave session")
+    response = requests.post(f"{BASE_URL}/sessions/{session_id}/leave/", headers=headers)
+    print_response(response)
+
+
+    # Join session
+    print("3. Join session")
     response = requests.post(f"{BASE_URL}/sessions/{session_id}/join/", headers=headers)
+    print_response(response)
+
+    # Get leaderboard
+    print("4. Ready player")
+    response = requests.post(f"{BASE_URL}/sessions/{session_id}/ready/", headers=headers)
+    print_response(response)
+    
+
+    # Get leaderboard
+    print("5. Start session")
+    response = requests.post(f"{BASE_URL}/sessions/{session_id}/start/", headers=headers)
     print_response(response)
     
     # Get session problems
-    print("3. Get session problems")
+    print("6. Get session problems")
     response = requests.get(f"{BASE_URL}/sessions/{session_id}/problems/", headers=headers)
     print_response(response)
     
     # Get leaderboard
-    print("4. Get leaderboard")
+    print("7. Get leaderboard")
     response = requests.get(f"{BASE_URL}/sessions/{session_id}/leaderboard/", headers=headers)
     print_response(response)
     
@@ -82,7 +99,7 @@ def test_problems(token, session_id):
     
     # Get all problems
     print("1. Get all problems")
-    response = requests.get(f"{BASE_URL}/problems/", headers=headers)
+    response = requests.get(f"{BASE_URL}/solve/1/details/", headers=headers)
     print_response(response)
     problem_id = response.json()[0].get('id')
     

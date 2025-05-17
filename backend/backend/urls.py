@@ -20,6 +20,9 @@ from CodingGrounds.views import (
     UserLoginView,
     UserRegistrationView,
     current_user,
+    LeagueViewSet,
+    LeagueMatchViewSet,
+    LeagueParticipationViewSet
 )
 
 from CodingGrounds.swagger import schema_view
@@ -32,6 +35,9 @@ router.register(r'submissions', SubmissionView, basename='submission')
 router.register(r'sessions', GameSessionView, basename='session')
 router.register(r'participations', GameParticipationView, basename='participation')
 router.register(r'solve', SolveProblemView, basename='solve')
+router.register(r'leagues', LeagueViewSet)
+router.register(r'league-matches', LeagueMatchViewSet)
+router.register(r'league-participations', LeagueParticipationViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

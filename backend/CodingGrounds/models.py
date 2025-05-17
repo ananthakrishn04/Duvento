@@ -4,6 +4,7 @@ import uuid
 from datetime import timedelta
 from django.utils import timezone
 
+
 class Badge(models.Model):
     """Badges that can be earned by users"""
     name = models.CharField(max_length=100)
@@ -313,3 +314,441 @@ class GameParticipation(models.Model):
     
     def __str__(self):
         return f"{self.profile.user.username} in {self.game_session.title}"
+
+
+class League(models.Model):
+    """A tournament with multiple game sessions leading to finals"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    start_date = models.DateTimeField(null=True, blank=True)
+    end_date = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    max_participants = models.IntegerField(default=8, help_text="Must be a power of 2 (e.g. 4, 8, 16)")
+    
+    # League creator
+    created_by = models.ForeignKey(
+        CodingProfile, 
+        on_delete=models.CASCADE, 
+        related_name='created_leagues'
+    )
+    
+    # League participants
+    participants = models.ManyToManyField(
+        CodingProfile, 
+        through='LeagueParticipation',
+        related_name='participating_leagues'
+    )
+    
+    # Problems to be used in the league sessions
+    problems = models.ManyToManyField(
+        CodingProblem, 
+        related_name='league_problems',
+        blank=True
+    )
+    
+    # Access control
+    is_private = models.BooleanField(default=False)
+    access_code = models.CharField(max_length=20, blank=True, null=True)
+    
+    # League status
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('registration', 'Registration Open'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='registration'
+    )
+    
+    # League format
+    FORMAT_CHOICES = [
+        ('knockout', 'Single Elimination'),
+        ('double_elim', 'Double Elimination'),
+        ('round_robin', 'Round Robin')
+    ]
+    format = models.CharField(
+        max_length=20,
+        choices=FORMAT_CHOICES,
+        default='knockout'
+    )
+    
+    # League settings
+    session_duration = models.IntegerField(default=15, help_text="Duration in minutes for each match")
+    current_round = models.IntegerField(default=1)
+    total_rounds = models.IntegerField(default=3)  # Calculated based on participants
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at']),
+            models.Index(fields=['is_active']),
+            models.Index(fields=['status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} ({self.get_status_display()})"
+    
+    def add_participant(self, profile):
+        """Add a participant to the league"""
+        if self.status != 'registration':
+            return False, "Registration is closed"
+            
+        if self.participants.count() >= self.max_participants:
+            return False, "League is full"
+            
+        if self.participants.filter(id=profile.id).exists():
+            return False, "Already registered"
+            
+        LeagueParticipation.objects.create(
+            league=self,
+            profile=profile
+        )
+        return True, "Successfully registered"
+    
+    def remove_participant(self, profile):
+        """Remove a participant from the league"""
+        if self.status != 'registration':
+            return False, "Cannot remove participants after registration is closed"
+            
+        participation = LeagueParticipation.objects.filter(
+            league=self,
+            profile=profile
+        ).first()
+        
+        if participation:
+            participation.delete()
+            return True, "Participant removed"
+        return False, "Participant not found"
+    
+    def start_league(self):
+        """Start the league and create the first round of sessions"""
+        if self.status != 'registration':
+            return False, "League is not in registration phase"
+            
+        participants_count = self.participants.count()
+        if participants_count < 2:
+            return False, "Need at least 2 participants"
+        
+        # Calculate total rounds needed based on participants
+        # For knockout: log2(participants)
+        self.total_rounds = max(1, (participants_count - 1).bit_length())
+        
+        # Set status to in progress
+        self.status = 'in_progress'
+        self.start_date = timezone.now()
+        self.save()
+        
+        # Create first round matchups
+        self._create_round_matchups(1)
+        
+        return True, "League started successfully"
+    
+    def _create_round_matchups(self, round_number):
+        """Create game sessions for a specific round"""
+        if round_number > self.total_rounds:
+            self._finalize_league()
+            return
+            
+        # Get participants for this round
+        if round_number == 1:
+            # First round: all participants
+            participants = list(self.participants.all())
+            
+            # Seed/shuffle participants if needed
+            # In a real app, you might want to seed based on rating
+            import random
+            random.shuffle(participants)
+        else:
+            # Later rounds: winners from previous round
+            previous_matches = LeagueMatch.objects.filter(
+                league=self,
+                round_number=round_number-1
+            )
+            participants = []
+            for match in previous_matches:
+                if match.winner:
+                    participants.append(match.winner)
+        
+        # Number of matches in this round
+        num_matches = len(participants) // 2
+        
+        # Create matches
+        for i in range(num_matches):
+            participant1 = participants[i*2]
+            participant2 = participants[i*2+1]
+            
+            # Create a game session for this match
+            session = GameSession.objects.create(
+                title=f"{self.title} - Round {round_number}, Match {i+1}",
+                description=f"League match between {participant1.display_name} and {participant2.display_name}",
+                max_participants=2,  # Just the two participants
+                is_private=True,  # Only for these participants
+                created_by=self.created_by  # Creator is the league creator
+            )
+            
+            # Add the participants
+            session.add_participant(participant1)
+            session.add_participant(participant2)
+            
+            # Add problems from the league
+            league_problems = self.problems.all()
+            if league_problems.exists():
+                for problem in league_problems:
+                    session.problems.add(problem)
+            
+            # Create league match record
+            LeagueMatch.objects.create(
+                league=self,
+                game_session=session,
+                round_number=round_number,
+                participant1=participant1,
+                participant2=participant2
+            )
+    
+    def advance_round(self):
+        """Advance to the next round of the league"""
+        if self.status != 'in_progress':
+            return False, "League is not in progress"
+            
+        # Check if current round is completed
+        incomplete_matches = LeagueMatch.objects.filter(
+            league=self,
+            round_number=self.current_round,
+            winner__isnull=True
+        ).exists()
+        
+        if incomplete_matches:
+            return False, "Current round is not complete"
+            
+        # Advance to next round
+        self.current_round += 1
+        self.save()
+        
+        if self.current_round > self.total_rounds:
+            self._finalize_league()
+            return True, "League completed"
+            
+        # Create next round matchups
+        self._create_round_matchups(self.current_round)
+        
+        return True, "Advanced to next round"
+    
+    def _finalize_league(self):
+        """Finalize the league and assign final rankings"""
+        if self.format == 'knockout':
+            # Find the winner (winner of the last match)
+            final_match = LeagueMatch.objects.filter(
+                league=self,
+                round_number=self.total_rounds
+            ).first()
+            
+            if final_match and final_match.winner:
+                # Rank 1: Winner
+                winner_participation = LeagueParticipation.objects.get(
+                    league=self,
+                    profile=final_match.winner
+                )
+                winner_participation.final_rank = 1
+                winner_participation.save()
+                
+                # Rank 2: Runner-up (loser of the final match)
+                runner_up = final_match.participant1 if final_match.winner == final_match.participant2 else final_match.participant2
+                runner_up_participation = LeagueParticipation.objects.get(
+                    league=self,
+                    profile=runner_up
+                )
+                runner_up_participation.final_rank = 2
+                runner_up_participation.save()
+                
+                # Semifinalists (lose in the semifinal round)
+                if self.total_rounds > 1:
+                    semifinal_matches = LeagueMatch.objects.filter(
+                        league=self,
+                        round_number=self.total_rounds - 1
+                    )
+                    
+                    semifinalists = []
+                    for match in semifinal_matches:
+                        loser = match.participant1 if match.winner == match.participant2 else match.participant2
+                        semifinalists.append(loser)
+                    
+                    # Both semifinalists get rank 3
+                    for i, semifinalist in enumerate(semifinalists):
+                        semifinalist_participation = LeagueParticipation.objects.get(
+                            league=self,
+                            profile=semifinalist
+                        )
+                        semifinalist_participation.final_rank = 3
+                        semifinalist_participation.save()
+                
+                # Other participants: ranked based on the round they were eliminated
+                for round_num in range(1, self.total_rounds):
+                    matches = LeagueMatch.objects.filter(
+                        league=self,
+                        round_number=round_num
+                    )
+                    
+                    eliminated_rank = 2**(self.total_rounds - round_num) + 1
+                    
+                    for match in matches:
+                        if match.winner:
+                            loser = match.participant1 if match.winner == match.participant2 else match.participant2
+                            loser_participation = LeagueParticipation.objects.get(
+                                league=self,
+                                profile=loser
+                            )
+                            
+                            if loser_participation.final_rank is None:
+                                loser_participation.final_rank = eliminated_rank
+                                loser_participation.save()
+        
+        # Update league status
+        self.status = 'completed'
+        self.end_date = timezone.now()
+        self.save()
+        
+        # Update participant ratings based on final ranks
+        self._update_participant_ratings()
+    
+    def _update_participant_ratings(self):
+        """Update participant ratings based on league performance"""
+        # Calculate average rating of participants
+        participations = LeagueParticipation.objects.filter(league=self)
+        
+        if not participations.exists():
+            return
+            
+        ratings = [p.profile.rating for p in participations]
+        avg_rating = sum(ratings) / len(ratings)
+        
+        # Update ratings based on final rank
+        for participation in participations:
+            if participation.final_rank:
+                # Higher rank (lower number) is better
+                expected_rank = (len(participations) + 1) / 2  # Middle rank
+                actual_rank = participation.final_rank
+                
+                # Calculate rating change
+                rank_diff = expected_rank - actual_rank
+                rating_change = int(rank_diff * 10)
+                
+                # Apply a scaling factor based on league size
+                scaling = min(2.0, len(participations) / 8)
+                rating_change = int(rating_change * scaling)
+                
+                # Apply rating change
+                participation.profile.rating = max(0, participation.profile.rating + rating_change)
+                participation.profile.save()
+
+class LeagueParticipation(models.Model):
+    """Junction table between League and CodingProfile with additional data"""
+    league = models.ForeignKey(League, on_delete=models.CASCADE, related_name='participations')
+    profile = models.ForeignKey(CodingProfile, on_delete=models.CASCADE, related_name='league_participations')
+    registration_date = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    final_rank = models.IntegerField(null=True, blank=True)
+    score = models.IntegerField(default=0)
+    
+    # Access control fields
+    is_admin = models.BooleanField(default=False, help_text="Can edit league settings")
+    
+    class Meta:
+        unique_together = ('league', 'profile')
+        indexes = [
+            models.Index(fields=['league', '-score']),
+            models.Index(fields=['league', 'final_rank']),
+        ]
+    
+    def __str__(self):
+        return f"{self.profile.display_name} in {self.league.title}"
+
+class LeagueMatch(models.Model):
+    """A match within a league"""
+    league = models.ForeignKey(League, on_delete=models.CASCADE, related_name='matches')
+    game_session = models.OneToOneField(GameSession, on_delete=models.CASCADE, related_name='league_match')
+    round_number = models.IntegerField(default=1)
+    match_number = models.IntegerField(default=1)
+    
+    # The two participants in this match
+    participant1 = models.ForeignKey(
+        CodingProfile, 
+        on_delete=models.CASCADE, 
+        related_name='league_matches_as_participant1'
+    )
+    participant2 = models.ForeignKey(
+        CodingProfile, 
+        on_delete=models.CASCADE, 
+        related_name='league_matches_as_participant2'
+    )
+    
+    # Winner of the match (null if not yet determined)
+    winner = models.ForeignKey(
+        CodingProfile, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='league_matches_won'
+    )
+    
+    scheduled_time = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('in_progress', 'In Progress'),
+            ('completed', 'Completed'),
+            ('cancelled', 'Cancelled'),
+        ],
+        default='pending'
+    )
+    
+    class Meta:
+        ordering = ['league', 'round_number', 'match_number']
+        indexes = [
+            models.Index(fields=['league', 'round_number']),
+        ]
+        
+    def __str__(self):
+        return f"{self.league.title} - Round {self.round_number}, Match {self.match_number}"
+    
+    def determine_winner(self):
+        """Determine the winner based on game session results"""
+        if not self.game_session or self.game_session.is_active:
+            return None
+            
+        # Get the participations in this game session
+        p1_participation = GameParticipation.objects.filter(
+            game_session=self.game_session,
+            profile=self.participant1
+        ).first()
+        
+        p2_participation = GameParticipation.objects.filter(
+            game_session=self.game_session,
+            profile=self.participant2
+        ).first()
+        
+        if not p1_participation or not p2_participation:
+            return None
+            
+        # Compare problems solved
+        if p1_participation.problems_solved > p2_participation.problems_solved:
+            self.winner = self.participant1
+        elif p2_participation.problems_solved > p1_participation.problems_solved:
+            self.winner = self.participant2
+        else:
+            # Tie-breaker: less time
+            if p1_participation.total_time < p2_participation.total_time:
+                self.winner = self.participant1
+            else:
+                self.winner = self.participant2
+        
+        self.status = 'completed'
+        self.save()
+        
+        return self.winner

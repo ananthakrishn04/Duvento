@@ -1,26 +1,25 @@
-from django.shortcuts import render,redirect,get_object_or_404
+from django.shortcuts import render, get_object_or_404
 from django.utils import timezone
-from django.http import HttpResponse, JsonResponse
 from django.conf import settings
+from django.db.models import Q
 
 import requests
-import time
-import json
 import random
 
 # Create your views here.
-from rest_framework import viewsets,status
+from rest_framework import viewsets, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.decorators import api_view,action
-from rest_framework.permissions import IsAuthenticated,AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAuthenticatedOrReadOnly, BasePermission
 from rest_framework.authtoken.models import Token
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.authtoken.serializers import AuthTokenSerializer
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 
-from .models import GameSession, Badge, CodingProfile, CodingProblem, Submission, GameParticipation
+from .models import (
+    GameSession, Badge, CodingProfile, CodingProblem, Submission, GameParticipation,
+    League, LeagueParticipation, LeagueMatch, CodingProfile, GameSession
+)
 
 from .serializers import (
     BadgeSerializer,
@@ -29,13 +28,16 @@ from .serializers import (
     SubmissionSerializer,
     GameSessionSerializer,
     GameParticipationSerializer,
-    UserLoginSerializer
+    UserLoginSerializer,
+    LeagueSerializer, 
+    LeagueDetailSerializer, 
+    LeagueParticipationSerializer, 
+    LeagueMatchSerializer
 )
 
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
-from django.db import models
 from .websocket_utils import WebSocketManager
+
+
 
 def mainView(request):
     return render(request,"coding-grounds-app.html")
@@ -196,8 +198,8 @@ class GameSessionView(viewsets.ModelViewSet):
         profile = self.request.user.coding_profile
         # Show sessions where user is either creator or participant
         return GameSession.objects.filter(
-            models.Q(created_by=profile) | 
-            models.Q(participants=profile)
+            Q(created_by=profile) | 
+            Q(participants=profile)
         ).distinct()
 
     def get_leaderboard_data(self, session):
@@ -660,6 +662,398 @@ class SolveProblemView(viewsets.ModelViewSet):
             {"detail": "Method not allowed. Use /solve/{problem_id}/submit/ to submit a solution."},
             status=status.HTTP_405_METHOD_NOT_ALLOWED
         )
+
+class IsOwnerOrReadOnly(BasePermission):
+    """
+    Custom permission to only allow owners of a league to edit it.
+    """
+    def has_object_permission(self, request, view, obj):
+        # Read permissions are allowed to any request
+        if request.method in permissions.SAFE_METHODS:
+            return True
+            
+        # Write permissions are only allowed to the league creator
+        return obj.created_by == request.user.coding_profile
+
+
+class LeagueViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for viewing and editing leagues.
+    """
+    queryset = League.objects.all()
+    serializer_class = LeagueSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly, IsOwnerOrReadOnly]
+    
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return LeagueDetailSerializer
+        return LeagueSerializer
+    
+    def get_queryset(self):
+        """
+        Optionally restricts the returned leagues based on query parameters,
+        by filtering against 'status', 'active', or user's participation.
+        """
+        queryset = League.objects.all()
+        
+        # Apply filters based on query parameters
+        status = self.request.query_params.get('status')
+        is_active = self.request.query_params.get('active')
+        my_leagues = self.request.query_params.get('my_leagues')
+        
+        if status:
+            queryset = queryset.filter(status=status)
+            
+        if is_active is not None:
+            is_active_bool = is_active.lower() == 'true'
+            queryset = queryset.filter(is_active=is_active_bool)
+        
+        # Filter for current user's leagues if requested and authenticated
+        if my_leagues and self.request.user.is_authenticated:
+            profile = self.request.user.coding_profile
+            queryset = queryset.filter(
+                Q(created_by=profile) | Q(participants=profile)
+            ).distinct()
+        
+        # Don't show private leagues unless they're the user's
+        if not self.request.user.is_authenticated:
+            queryset = queryset.filter(is_private=False)
+        else:
+            profile = self.request.user.coding_profile
+            queryset = queryset.filter(
+                Q(is_private=False) | 
+                Q(created_by=profile) | 
+                Q(participants=profile)
+            ).distinct()
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        """Set the current user's profile as the creator of the league"""
+        serializer.save(created_by=self.request.user.coding_profile)
+    
+    @action(detail=True, methods=['post'])
+    def register(self, request, pk=None):
+        """Register the current user to participate in the league"""
+        league = self.get_object()
+        profile = request.user.coding_profile
+        
+        # Check if access code is required and provided
+        if league.is_private and league.access_code:
+            provided_code = request.data.get('access_code')
+            if not provided_code or provided_code != league.access_code:
+                return Response(
+                    {"detail": "Invalid access code"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        success, message = league.add_participant(profile)
+        
+        if success:
+            return Response({"detail": message}, status=status.HTTP_200_OK)
+        else:
+            return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def unregister(self, request, pk=None):
+        """Unregister the current user from the league"""
+        league = self.get_object()
+        profile = request.user.coding_profile
+        
+        success, message = league.remove_participant(profile)
+        
+        if success:
+            return Response({"detail": message}, status=status.HTTP_200_OK)
+        else:
+            return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def start(self, request, pk=None):
+        """Start the league and create first round matchups"""
+        league = self.get_object()
+        
+        # Only the league creator can start it
+        if league.created_by != request.user.coding_profile:
+            return Response(
+                {"detail": "Only the league creator can start the league"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        success, message = league.start_league()
+        
+        if success:
+            return Response({"detail": message}, status=status.HTTP_200_OK)
+        else:
+            return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def advance_round(self, request, pk=None):
+        """Advance the league to the next round"""
+        league = self.get_object()
+        
+        # Only the league creator can advance rounds
+        if league.created_by != request.user.coding_profile:
+            return Response(
+                {"detail": "Only the league creator can advance rounds"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        success, message = league.advance_round()
+        
+        if success:
+            return Response({"detail": message}, status=status.HTTP_200_OK)
+        else:
+            return Response({"detail": message}, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def cancel(self, request, pk=None):
+        """Cancel the league"""
+        league = self.get_object()
+        
+        # Only the league creator can cancel it
+        if league.created_by != request.user.coding_profile:
+            return Response(
+                {"detail": "Only the league creator can cancel the league"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        if league.status in ['completed', 'cancelled']:
+            return Response(
+                {"detail": "Cannot cancel a completed or already canceled league"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        league.status = 'cancelled'
+        league.is_active = False
+        league.end_date = timezone.now()
+        league.save()
+        
+        return Response(
+            {"detail": "League cancelled successfully"},
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def add_problem(self, request, pk=None):
+        """Add a problem to the league"""
+        league = self.get_object()
+        
+        # Only the league creator can add problems
+        if league.created_by != request.user.coding_profile:
+            return Response(
+                {"detail": "Only the league creator can add problems"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Cannot add problems after league has started
+        if league.status not in ['pending', 'registration']:
+            return Response(
+                {"detail": "Cannot add problems after league has started"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        problem_id = request.data.get('problem_id')
+        if not problem_id:
+            return Response(
+                {"detail": "Problem ID is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from .models import CodingProblem
+        try:
+            problem = CodingProblem.objects.get(id=problem_id)
+            league.problems.add(problem)
+            return Response(
+                {"detail": "Problem added successfully"},
+                status=status.HTTP_200_OK
+            )
+        except CodingProblem.DoesNotExist:
+            return Response(
+                {"detail": "Problem not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def remove_problem(self, request, pk=None):
+        """Remove a problem from the league"""
+        league = self.get_object()
+        
+        # Only the league creator can remove problems
+        if league.created_by != request.user.coding_profile:
+            return Response(
+                {"detail": "Only the league creator can remove problems"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Cannot remove problems after league has started
+        if league.status not in ['pending', 'registration']:
+            return Response(
+                {"detail": "Cannot remove problems after league has started"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        problem_id = request.data.get('problem_id')
+        if not problem_id:
+            return Response(
+                {"detail": "Problem ID is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        from .models import CodingProblem
+        try:
+            problem = CodingProblem.objects.get(id=problem_id)
+            if problem in league.problems.all():
+                league.problems.remove(problem)
+                return Response(
+                    {"detail": "Problem removed successfully"},
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {"detail": "Problem not in league"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except CodingProblem.DoesNotExist:
+            return Response(
+                {"detail": "Problem not found"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class LeagueMatchViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing league matches.
+    """
+    queryset = LeagueMatch.objects.all()
+    serializer_class = LeagueMatchSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get_queryset(self):
+        """
+        Optionally restricts the returned matches to those belonging
+        to a specific league or round.
+        """
+        queryset = LeagueMatch.objects.all()
+        
+        # Filter by league if provided
+        league_id = self.request.query_params.get('league')
+        if league_id:
+            queryset = queryset.filter(league__id=league_id)
+        
+        # Filter by round if provided
+        round_number = self.request.query_params.get('round')
+        if round_number:
+            queryset = queryset.filter(round_number=round_number)
+        
+        # Filter by participant if provided
+        participant_id = self.request.query_params.get('participant')
+        if participant_id:
+            queryset = queryset.filter(
+                Q(participant1__id=participant_id) | Q(participant2__id=participant_id)
+            )
+        
+        # Filter by status if provided
+        status_filter = self.request.query_params.get('status')
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        
+        return queryset
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def join_game(self, request, pk=None):
+        """Join the game session for this match"""
+        match = self.get_object()
+        profile = request.user.coding_profile
+        
+        # Check if user is a participant in this match
+        if profile != match.participant1 and profile != match.participant2:
+            return Response(
+                {"detail": "You are not a participant in this match"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Check if the match has a game session
+        if not match.game_session:
+            return Response(
+                {"detail": "No game session available for this match"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Return the game session ID for the frontend to redirect
+        return Response({
+            "game_session_id": str(match.game_session.id)
+        }, status=status.HTTP_200_OK)
+    
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def determine_winner(self, request, pk=None):
+        """Manually determine the winner of this match"""
+        match = self.get_object()
+        
+        # Only league creator can manually set winners
+        if match.league.created_by != request.user.coding_profile:
+            return Response(
+                {"detail": "Only the league creator can manually determine winners"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        winner_id = request.data.get('winner_id')
+        if not winner_id:
+            return Response(
+                {"detail": "Winner ID is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate winner is a participant
+        if (str(match.participant1.id) != winner_id and 
+            str(match.participant2.id) != winner_id):
+            return Response(
+                {"detail": "Specified winner is not a participant in this match"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Set the winner
+        winner = CodingProfile.objects.get(id=winner_id)
+        match.winner = winner
+        match.status = 'completed'
+        match.save()
+        
+        return Response(
+            {"detail": f"{winner.display_name} set as the winner"},
+            status=status.HTTP_200_OK
+        )
+
+
+class LeagueParticipationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for viewing league participations.
+    """
+    queryset = LeagueParticipation.objects.all()
+    serializer_class = LeagueParticipationSerializer
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get_queryset(self):
+        """
+        Optionally filters participations by league or profile.
+        """
+        queryset = LeagueParticipation.objects.all()
+        
+        # Filter by league if provided
+        league_id = self.request.query_params.get('league')
+        if league_id:
+            queryset = queryset.filter(league__id=league_id)
+        
+        # Filter by profile if provided
+        profile_id = self.request.query_params.get('profile')
+        if profile_id:
+            queryset = queryset.filter(profile__id=profile_id)
+            
+        # Filter by current user if requested
+        my_participations = self.request.query_params.get('my_participations')
+        if my_participations and self.request.user.is_authenticated:
+            profile = self.request.user.coding_profile
+            queryset = queryset.filter(profile=profile)
+        
+        return queryset
 
 @api_view(['GET'])
 def current_user(request):

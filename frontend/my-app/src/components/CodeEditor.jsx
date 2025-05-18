@@ -1,35 +1,182 @@
 import React, { useState } from 'react';
+import AceEditor from 'react-ace';
 
-const CodeEditor = ({ initialCode = '// Type your code here' }) => {
-  const [code, setCode] = useState(initialCode);
-  const [lineCount, setLineCount] = useState(1);
+// Import syntax highlighting modes
+import 'ace-builds/src-noconflict/mode-python';
+import 'ace-builds/src-noconflict/mode-javascript';
+import 'ace-builds/src-noconflict/mode-java';
 
-  const handleCodeChange = (e) => {
-    const newCode = e.target.value;
-    setCode(newCode);
+// Import themes
+import 'ace-builds/src-noconflict/theme-github';
+import 'ace-builds/src-noconflict/theme-monokai';
+
+// Import editor features
+import 'ace-builds/src-noconflict/ext-language_tools';
+
+const CodeEditor = ({ onSubmit, onRun, disabled = false }) => {
+  const [code, setCode] = useState('# Write your code here\n');
+  const [language, setLanguage] = useState('python');
+  const [theme, setTheme] = useState('monokai');
+  const [result, setResult] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleLanguageChange = (e) => {
+    setLanguage(e.target.value);
     
-    // Update line count
-    const lines = newCode.split('\n').length;
-    setLineCount(lines);
+    // Update starter code based on language
+    switch(e.target.value) {
+      case 'python':
+        setCode('# Write your code here\n');
+        break;
+      case 'javascript':
+        setCode('// Write your code here\n');
+        break;
+      case 'java':
+        setCode('public class Solution {\n  public static void main(String[] args) {\n    // Write your code here\n  }\n}');
+        break;
+      default:
+        setCode('# Write your code here\n');
+    }
   };
 
-  // Generate line numbers
-  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1).join('\n');
+  const handleThemeChange = (e) => {
+    setTheme(e.target.value);
+  };
+
+  const handleCodeChange = (newCode) => {
+    setCode(newCode);
+  };
+
+  const handleRun = async () => {
+    if (isLoading || disabled) return;
+    
+    setIsLoading(true);
+    setResult(null);
+    
+    try {
+      const data = await onRun(code, language);
+      setResult(data);
+    } catch (error) {
+      setResult({ error: error.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (isLoading || disabled) return;
+    
+    setIsLoading(true);
+    setResult(null);
+    
+    try {
+      const data = await onSubmit(code, language);
+      setResult(data);
+    } catch (error) {
+      setResult({ error: error.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getLanguageMode = (language) => {
+    switch(language) {
+      case 'javascript': return 'javascript';
+      case 'java': return 'java';
+      case 'python': 
+      default: return 'python';
+    }
+  };
 
   return (
-    <div className="w-full h-full rounded border border-gray-300 bg-gray-800 flex overflow-hidden font-mono text-sm">
-      {/* Line numbers */}
-      <div className="py-2 px-2 bg-gray-900 text-gray-500 text-right select-none min-w-[40px]">
-        {lineNumbers}
+    <div className="code-editor">
+      <div className="editor-controls">
+        <div className="editor-select">
+          <label htmlFor="language">Language:</label>
+          <select 
+            id="language"
+            value={language}
+            onChange={handleLanguageChange}
+            disabled={disabled}
+          >
+            <option value="python">Python</option>
+            <option value="javascript">JavaScript</option>
+            <option value="java">Java</option>
+          </select>
+        </div>
+        
+        <div className="editor-select">
+          <label htmlFor="theme">Theme:</label>
+          <select 
+            id="theme"
+            value={theme}
+            onChange={handleThemeChange}
+            disabled={disabled}
+          >
+            <option value="monokai">Monokai</option>
+            <option value="github">GitHub</option>
+          </select>
+        </div>
       </div>
       
-      {/* Actual editor */}
-      <textarea
-        value={code}
+      <AceEditor
+        mode={getLanguageMode(language)}
+        theme={theme}
         onChange={handleCodeChange}
-        className="flex-grow bg-gray-800 text-gray-100 p-2 resize-none focus:outline-none"
-        spellCheck="false"
+        value={code}
+        name="code-editor"
+        editorProps={{ $blockScrolling: true }}
+        setOptions={{
+          enableBasicAutocompletion: true,
+          enableLiveAutocompletion: true,
+          enableSnippets: true,
+          showLineNumbers: true,
+          tabSize: 2,
+        }}
+        fontSize={14}
+        width="100%"
+        height="400px"
+        readOnly={disabled}
       />
+      
+      <div className="editor-buttons">
+        <button 
+          onClick={handleRun}
+          className="run-btn"
+          disabled={isLoading || disabled}
+        >
+          {isLoading ? 'Running...' : 'Run Code'}
+        </button>
+        
+        <button 
+          onClick={handleSubmit}
+          className="submit-btn"
+          disabled={isLoading || disabled}
+        >
+          {isLoading ? 'Submitting...' : 'Submit Solution'}
+        </button>
+      </div>
+
+      {result && (
+        <div className={`result ${result.error ? 'error' : ''}`}>
+          <h3>Result</h3>
+          {result.error ? (
+            <div className="error-message">
+              <p>Error: {result.error}</p>
+            </div>
+          ) : (
+            <div className="result-data">
+              <p>Status: {result.result?.status || 'Unknown'}</p>
+              <div className="output">
+                <h4>Output:</h4>
+                <pre>{result.result?.output || 'No output'}</pre>
+              </div>
+              <p>Execution Time: {result.result?.time || 'N/A'}</p>
+              <p>Memory Usage: {result.result?.memory || 'N/A'}</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

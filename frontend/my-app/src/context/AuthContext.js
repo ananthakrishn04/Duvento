@@ -28,7 +28,15 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setUser(null);
     setToken(null);
+    
+    // Clear all authentication-related data from localStorage
     localStorage.removeItem('token');
+    localStorage.removeItem('userId');
+    localStorage.removeItem('profileId');
+    localStorage.removeItem('sessionId');
+    
+    // For security, you can also clear any other sensitive data
+    console.log('User logged out successfully');
   };
 
   const value = {

@@ -229,28 +229,71 @@ class GameSession(models.Model):
             return True
         return False
 
+    def calculate_score(self, time_taken, difficulty, incorrect_submissions, total_submissions, player_rating, opponent_rating, previous_score):
+        """Calculate the new score for a participant based on duel parameters."""
+        # Ensure all values are at least 1 to avoid zeroing out the product
+        time_taken = max(1, time_taken)
+        difficulty = max(1, difficulty)
+        incorrect_submissions = max(1, incorrect_submissions)
+        total_submissions = max(1, total_submissions)
+        player_rating = max(1, player_rating)
+        opponent_rating = max(1, opponent_rating)
+        
+        product = time_taken * difficulty * incorrect_submissions * total_submissions * player_rating * opponent_rating
+        return previous_score + product
+
     def end_session(self):
-        """End the game session and calculate final rankings"""
+        """End the game session and calculate final rankings and scores using duel logic"""
         self.is_active = False
         self.end_time = timezone.now()
         self.save()
         
-        # Calculate and update participant rankings
-        participations = self.participations.all()
+        participations = list(self.participations.all())
         sorted_participations = sorted(
             participations, 
             key=lambda p: (p.problems_solved, -p.total_time),
             reverse=True
         )
         
-        for rank, participation in enumerate(sorted_participations, 1):
-            participation.final_rank = rank
-            # Calculate score based on rank and problems solved
-            participation.score = max(0, 100 - (rank - 1) * 10) * participation.problems_solved
-            participation.save()
-            
-            # Update user ratings based on performance
-            self._update_user_rating(participation)
+        # Only for duels (2 participants)
+        if len(sorted_participations) == 2:
+            p1, p2 = sorted_participations
+            # For each participant, gather duel parameters
+            for i, participation in enumerate([p1, p2]):
+                opponent = p2 if i == 0 else p1
+                # Aggregate stats for the session
+                # For simplicity, use the hardest problem's difficulty
+                problems = self.problems.all()
+                difficulty = max([prob.difficulty for prob in problems]) if problems else 1
+                # Submissions for this participant in this session
+                submissions = participation.profile.submissions.filter(game_session=self)
+                total_submissions = submissions.count()
+                incorrect_submissions = submissions.exclude(status=Submission.Status.ACCEPTED).count()
+                time_taken = participation.total_time
+                player_rating = participation.profile.rating
+                opponent_rating = opponent.profile.rating
+                previous_score = participation.score
+                # Calculate new score
+                new_score = self.calculate_score(
+                    time_taken,
+                    difficulty,
+                    incorrect_submissions,
+                    total_submissions,
+                    player_rating,
+                    opponent_rating,
+                    previous_score
+                )
+                participation.final_rank = i + 1
+                participation.score = new_score
+                participation.save()
+                self._update_user_rating(participation)
+        else:
+            # Fallback to old logic for non-duel sessions
+            for rank, participation in enumerate(sorted_participations, 1):
+                participation.final_rank = rank
+                participation.score = max(0, 100 - (rank - 1) * 10) * participation.problems_solved
+                participation.save()
+                self._update_user_rating(participation)
 
     def _update_user_rating(self, participation):
         """Update a user's rating based on their performance in this session"""

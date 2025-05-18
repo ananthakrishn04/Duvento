@@ -441,6 +441,45 @@ class GameSessionView(viewsets.ModelViewSet):
         leaderboard_data = self.get_leaderboard_data(session)
         return Response(leaderboard_data)
 
+    @action(detail=True, methods=['post'])
+    def check_participants(self, request, pk=None):
+        """Check if at least 2 people have joined the session"""
+        try:
+            session = self.get_object()
+            participants_count = session.participants.count()
+            
+            return Response({
+                "has_enough_participants": participants_count >= 2,
+                "participants_count": participants_count,
+                "required_count": 2
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"detail": f"Error checking participants: {str(e)}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=True, methods=['post'])
+    def check_all_ready(self, request, pk=None):
+        """Check if all participants in the session are ready"""
+        try:
+            session = self.get_object()
+            all_ready = session.all_participants_ready()
+            participants_count = session.participants.count()
+            
+            return Response({
+                "all_ready": all_ready,
+                "participants_count": participants_count,
+                "ready_participants_count": session.participations.filter(is_ready=True).count()
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"detail": f"Error checking ready status: {str(e)}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 class GameParticipationView(viewsets.ModelViewSet):
     serializer_class = GameParticipationSerializer
     queryset = GameParticipation.objects.all()

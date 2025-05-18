@@ -1,8 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, BellIcon, UserIcon, ChevronRight, LogOut } from 'lucide-react';
 import CodeEditor from './CodeEditor';
+import { useLocation } from 'react-router-dom';
 
 const CodeEditorPage = () => {
+  const location = useLocation();
+  const [problem, setProblem] = useState(null);
+
+  useEffect(() => {
+    // Get problem data from location state
+    if (location.state?.problem) {
+      setProblem(location.state.problem);
+    }
+  }, [location]);
+
   return (
     <div className="w-full min-h-screen" style={{
       background: 'linear-gradient(120deg, #00bcd4 0%, #2196f3 100%)',
@@ -70,33 +81,39 @@ const CodeEditorPage = () => {
             {/* Left panel - Description */}
             <div className="w-1/2 p-6 flex flex-col">
               <div className="mb-6">
-                <h3 className="font-['Open_Sans',Helvetica] font-semibold text-gray-800 mb-2">Description</h3>
+                <h3 className="font-['Open_Sans',Helvetica] font-semibold text-gray-800 mb-2">
+                  {problem ? problem.title : 'Description'}
+                </h3>
                 <div className="w-full h-40 bg-gray-50 border border-[#00000029] rounded p-3 text-sm text-gray-700 overflow-auto">
-                  <p>Write a function that finds the longest substring without repeating characters in a given string.</p>
-                  <p className="mt-2">Example:</p>
-                  <p className="mt-1">Input: "abcabcbb"</p>
-                  <p>Output: 3 (The answer is "abc", with the length of 3)</p>
+                  {problem ? (
+                    <div>
+                      <p>{problem.description}</p>
+                      <p className="mt-2">Difficulty: {problem.difficulty}</p>
+                      <p className="mt-2">Time Limit: {problem.time_limit}s</p>
+                      <p>Memory Limit: {problem.memory_limit}MB</p>
+                    </div>
+                  ) : (
+                    <p>Loading problem description...</p>
+                  )}
                 </div>
               </div>
               
               <div className="mb-6">
-                <h3 className="font-['Open_Sans',Helvetica] font-semibold text-gray-800 mb-2">Example</h3>
+                <h3 className="font-['Open_Sans',Helvetica] font-semibold text-gray-800 mb-2">Example Test Cases</h3>
                 <div className="w-full h-32 bg-gray-50 border border-[#00000029] rounded p-3 font-mono text-sm text-gray-700 overflow-auto">
-                  <pre>{`function lengthOfLongestSubstring(s) {
-  let maxLength = 0;
-  let start = 0;
-  let charMap = {};
-  
-  for (let i = 0; i < s.length; i++) {
-    if (charMap[s[i]] >= start) {
-      start = charMap[s[i]] + 1;
-    }
-    charMap[s[i]] = i;
-    maxLength = Math.max(maxLength, i - start + 1);
-  }
-  
-  return maxLength;
-}`}</pre>
+                  {problem ? (
+                    <div>
+                      {problem.test_cases.map((testCase, index) => (
+                        <div key={index} className="mb-2">
+                          <p>Test Case {index + 1}:</p>
+                          <p>Input: {testCase.input}</p>
+                          <p>Expected Output: {testCase.expected_output}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>Loading test cases...</p>
+                  )}
                 </div>
               </div>
               
@@ -104,10 +121,10 @@ const CodeEditorPage = () => {
                 <h3 className="font-['Open_Sans',Helvetica] font-semibold text-gray-800 mb-2">Constraints</h3>
                 <div className="w-full h-32 bg-gray-50 border border-[#00000029] rounded p-3 text-sm text-gray-700 overflow-auto">
                   <ul className="list-disc pl-4">
-                    <li>0 &lt;= s.length &lt;= 5 * 10^4</li>
-                    <li>s consists of English letters, digits, symbols and spaces</li>
-                    <li>Your solution should run in O(n) time complexity</li>
-                    <li>You must handle edge cases like empty strings</li>
+                    <li>Time Limit: {problem?.time_limit || 1} second</li>
+                    <li>Memory Limit: {problem?.memory_limit || 128} MB</li>
+                    <li>Input must match the format shown in test cases</li>
+                    <li>Output must exactly match the expected output</li>
                   </ul>
                 </div>
               </div>
@@ -123,12 +140,7 @@ const CodeEditorPage = () => {
             <div className="w-1/2 p-6 flex flex-col">
               <h3 className="font-['Open_Sans',Helvetica] font-semibold text-gray-800 mb-2">Code Editor</h3>
               <div className="flex-grow">
-                <CodeEditor initialCode={`// Type your solution here
-
-function longestSubstring(s) {
-  // Your implementation
-  
-}`} />
+                <CodeEditor initialCode={`// Write your solution for ${problem?.title || 'the problem'} here\n\n`} />
               </div>
             </div>
           </div>

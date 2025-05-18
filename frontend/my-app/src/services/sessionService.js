@@ -39,17 +39,39 @@ export const sessionService = {
   },
 
   async getSessionStatus(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/status/`, {
-      headers: {
-        'Authorization': `Token ${authService.getToken()}`
-      }
-    });
+    // Check both conditions using the new endpoints
+    const [participantsResponse, readyResponse] = await Promise.all([
+      fetch(`${API_BASE_URL}/api/sessions/${sessionId}/check_participants/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${authService.getToken()}`
+        }
+      }),
+      fetch(`${API_BASE_URL}/api/sessions/${sessionId}/check_all_ready/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${authService.getToken()}`
+        }
+      })
+    ]);
 
-    if (!response.ok) {
+    if (!participantsResponse.ok || !readyResponse.ok) {
       throw new Error('Failed to get session status');
     }
 
-    return await response.json();
+    const [participantsData, readyData] = await Promise.all([
+      participantsResponse.json(),
+      readyResponse.json()
+    ]);
+
+    return {
+      hasEnoughParticipants: participantsData.has_enough_participants,
+      participantsCount: participantsData.participants_count,
+      allReady: readyData.all_ready,
+      readyParticipantsCount: readyData.ready_participants_count
+    };
   },
 
   async setReady(sessionId) {

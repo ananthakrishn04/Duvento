@@ -16,11 +16,18 @@ const WaitingRoom = ({ isOpen, onClose, sessionId }) => {
       interval = setInterval(async () => {
         try {
           const data = await sessionService.getSessionStatus(sessionId);
-          setOpponentReady(data.opponentReady);
+          setOpponentReady(data.allReady);
           
-          // If both players are ready and the game has started, navigate to editor
-          if (data.isStarted) {
-            navigate(`/editor?session=${sessionId}`);
+          // If both conditions are met and the game has started, navigate to editor
+          if (data.hasEnoughParticipants && data.allReady) {
+            const canStart = true;
+            // Update UI to show start game is available
+            const startButton = document.getElementById('startGameButton');
+            if (startButton) {
+              startButton.disabled = false;
+              startButton.classList.remove('opacity-50', 'cursor-not-allowed');
+              startButton.classList.add('hover:bg-blue-600');
+            }
           }
         } catch (error) {
           console.error('Failed to fetch session status:', error);
@@ -40,7 +47,14 @@ const WaitingRoom = ({ isOpen, onClose, sessionId }) => {
 
   const handleStartGame = async () => {
     try {
-      await startSession(sessionId);
+      const response = await startSession(sessionId);
+      // Navigate to editor with problem data
+      navigate('/editor', { 
+        state: { 
+          problem: response.problem,
+          sessionId: sessionId
+        }
+      });
     } catch (error) {
       console.error('Failed to start game:', error);
     }

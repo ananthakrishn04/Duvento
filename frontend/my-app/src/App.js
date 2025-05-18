@@ -7,6 +7,7 @@ import { AuthProvider } from './context/AuthContext';
 import { SessionProvider } from './context/SessionContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './components/LandingPage';
+import CreateProblem from './components/CreateProblem';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path="/problems/create" element={<CreateProblem />} />
               <Route path="/" element={<Navigate to="/landing" replace />} />
             </Routes>
           </div>

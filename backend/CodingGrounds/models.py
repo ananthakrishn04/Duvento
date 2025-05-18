@@ -194,7 +194,7 @@ class GameSession(models.Model):
         null=True, 
         related_name='created_sessions'
     )
-    max_participants = models.IntegerField(default=0, help_text="0 for unlimited")
+    max_participants = models.IntegerField(default=2, help_text="0 for unlimited")
     is_private = models.BooleanField(default=False)
     access_code = models.CharField(max_length=20, blank=True, null=True)
     

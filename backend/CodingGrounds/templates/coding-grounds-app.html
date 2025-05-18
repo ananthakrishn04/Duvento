@@ -677,20 +677,53 @@
 
 
       // Update Session Status
-      function updateSessionStatus(statusData) {
+      async function updateSessionStatus(statusData) {
         const startSessionBtn = document.getElementById("startSessionBtn");
 
-        // Enable/disable start button based on ready status
-        if (statusData.all_ready) {
-          startSessionBtn.disabled = false;
-          startSessionBtn.classList.remove("bg-gray-500");
-          startSessionBtn.classList.add("bg-blue-500");
-        } else {
+        try {
+          // Get session ID from the URL
+          const sessionId = window.location.pathname.split('/').pop();
+
+          // Check both conditions using the new endpoints
+          const [participantsResponse, readyResponse] = await Promise.all([
+            fetch(`${BASE_URL}/sessions/${sessionId}/check_participants/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${localStorage.getItem("authToken")}`,
+              }
+            }),
+            fetch(`${BASE_URL}/sessions/${sessionId}/check_all_ready/`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Token ${localStorage.getItem("authToken")}`,
+              }
+            })
+          ]);
+
+          const participantsData = await participantsResponse.json();
+          const readyData = await readyResponse.json();
+
+          // Enable start button only if both conditions are met
+          const canStart = participantsData.has_enough_participants && readyData.all_ready;
+
+          if (canStart) {
+            startSessionBtn.disabled = false;
+            startSessionBtn.classList.remove("bg-gray-500");
+            startSessionBtn.classList.add("bg-blue-500");
+          } else {
+            startSessionBtn.disabled = true;
+            startSessionBtn.classList.remove("bg-blue-500");
+            startSessionBtn.classList.add("bg-gray-500");
+          }
+
+        } catch (error) {
+          console.error("Error checking session status:", error);
           startSessionBtn.disabled = true;
           startSessionBtn.classList.remove("bg-blue-500");
           startSessionBtn.classList.add("bg-gray-500");
         }
-
       }
       // Show WebSocket Log Section
       function showWebSocketLog() {

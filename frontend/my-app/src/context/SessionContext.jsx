@@ -31,9 +31,10 @@ export const SessionProvider = ({ children }) => {
 
   const handleStartSession = async (sessionId) => {
     try {
-      await sessionService.startSession(sessionId);
+      const response = await sessionService.startSession(sessionId);
       setIsStarted(true);
       setError(null);
+      return response;
     } catch (err) {
       setError('Failed to start session');
       console.error(err);

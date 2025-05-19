@@ -19,7 +19,7 @@ export const Login = () => {
     e.preventDefault();
     const success = await login(username, password);
     if (success) {
-      navigate("/editor");
+      navigate("/landing");
     }
   };
 

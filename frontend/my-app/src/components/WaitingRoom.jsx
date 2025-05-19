@@ -8,8 +8,10 @@ const WaitingRoom = ({ isOpen, onClose, sessionId }) => {
   const { setReady, startSession, isReady, isStarted, error } = useSession();
   const [opponentReady, setOpponentReady] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sessionProblems, setSessionProblems] = useState(null);
+  const [checkingSessionStart, setCheckingSessionStart] = useState(false);
 
-  // Poll for opponent's ready status
+  // Poll for opponent's ready status and check if session is started
   useEffect(() => {
     let interval;
     if (isOpen && sessionId) {
@@ -29,13 +31,53 @@ const WaitingRoom = ({ isOpen, onClose, sessionId }) => {
               startButton.classList.add('hover:bg-blue-600');
             }
           }
+          
+          // If both players are ready, start checking if session has been started
+          if (data.allReady && !checkingSessionStart) {
+            setCheckingSessionStart(true);
+          }
         } catch (error) {
           console.error('Failed to fetch session status:', error);
         }
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [isOpen, sessionId, navigate]);
+  }, [isOpen, sessionId, navigate, checkingSessionStart]);
+
+  // Second effect to check if session is started
+  useEffect(() => {
+    let checkStartInterval;
+    if (checkingSessionStart && sessionId) {
+      checkStartInterval = setInterval(async () => {
+        try {
+          // Check if there are problems for this session
+          const response = await fetch(`http://localhost:8000/api/sessions/${sessionId}/problems/`, {
+            headers: {
+              'Authorization': `Token ${localStorage.getItem('token')}`
+            }
+          });
+          
+          if (response.ok) {
+            const problems = await response.json();
+            if (problems && problems.length > 0) {
+              // Session has started, navigate to editor
+              setSessionProblems(problems[0]);
+              navigate('/editor', { 
+                state: { 
+                  problem: problems[0],
+                  sessionId: sessionId
+                }
+              });
+              clearInterval(checkStartInterval);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check session start:', error);
+        }
+      }, 2000);
+    }
+    return () => clearInterval(checkStartInterval);
+  }, [checkingSessionStart, sessionId, navigate]);
 
   const handleSetReady = async () => {
     try {
@@ -142,6 +184,7 @@ const WaitingRoom = ({ isOpen, onClose, sessionId }) => {
             Ready
           </button>
           <button
+            id="startGameButton"
             onClick={handleStartGame}
             disabled={!isReady || !opponentReady}
             className={`flex-1 py-2 px-4 rounded-lg font-medium ${

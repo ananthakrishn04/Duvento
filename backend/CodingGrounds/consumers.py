@@ -23,9 +23,9 @@ class SessionConsumer(AsyncWebsocketConsumer):
             if not self.scope["user"].is_authenticated:
                 raise PermissionDenied("User must be authenticated")
             
-            # Verify user is a participant in the session
-            if not await self.is_session_participant():
-                raise PermissionDenied("User is not a participant in this session")
+            # # Verify user is a participant in the session
+            # if not await self.is_session_participant():
+            #     raise PermissionDenied("User is not a participant in this session")
             
             # Join session group
             await self.channel_layer.group_add(

@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, BellIcon, UserIcon, ChevronRight, LogOut } from 'lucide-react';
 import CodeEditor from './CodeEditor';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const CodeEditorPage = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [problem, setProblem] = useState(null);
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('javascript');
   const [submissionStatus, setSubmissionStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showQuitWarning, setShowQuitWarning] = useState(false);
 
   useEffect(() => {
     // Get problem data from location state
@@ -90,12 +92,67 @@ const CodeEditorPage = () => {
     }
   };
 
+  const handleQuit = async () => {
+    try {
+      // Call the API to leave the session
+      const response = await fetch(`http://localhost:8000/api/sessions/${location.state?.sessionId}/leave/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${localStorage.getItem('token')}`,
+        },
+      });
+
+      if(!response.ok)
+      {
+        throw new Error('Failed to leave session');
+      }
+
+      // Close WebSocket if it exists
+      // if (currentWebSocket) {
+      //   currentWebSocket.close();
+      // }
+
+      // Navigate back to landing page
+      navigate('/landing');
+    } catch (error) {
+      console.error('Error leaving session:', error);
+      alert('Failed to leave session. Please try again.');
+    }
+  };
+
   return (
     <div className="w-full min-h-screen" style={{
       background: 'linear-gradient(120deg, #00bcd4 0%, #2196f3 100%)',
       backgroundSize: 'cover',
       overflow: 'hidden'
     }}>
+      {/* Quit Warning Modal */}
+      {showQuitWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">Quit Game?</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to quit the game? This action cannot be undone and you will lose your progress.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowQuitWarning(false)}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleQuit}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+              >
+                Quit Game
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Background decoration - subtle waves */}
       <div className="absolute w-full h-full inset-0 z-0" 
         style={{
@@ -261,7 +318,10 @@ const CodeEditorPage = () => {
                 </span>
                 <ChevronRight size={16} className="ml-1" />
               </button>
-              <button className="px-4 py-2 bg-[#c5051d] rounded flex items-center text-white hover:bg-red-700 transition-colors">
+              <button 
+                className="px-4 py-2 bg-[#c5051d] rounded flex items-center text-white hover:bg-red-700 transition-colors"
+                onClick={() => setShowQuitWarning(true)}
+              >
                 <LogOut size={16} className="mr-1" />
                 <span className="font-['Open_Sans',Helvetica] font-semibold text-sm">Quit Game</span>
               </button>

@@ -66,6 +66,7 @@ const CodeEditor = ({ initialCode = '// Type your code here', onCodeChange }) =>
           onChange={onChange}
           theme="dark"
           className="h-full"
+          style={{ textAlign: 'left' }}
         />
       </div>
     </div>

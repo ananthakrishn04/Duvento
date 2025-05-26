@@ -33,7 +33,8 @@
         var editor = CodeMirror.fromTextArea(document.getElementById("codeEditor"), {
             lineNumbers: true,
             mode: "python",
-            extraKeys: { "Ctrl-Space": "autocomplete" }
+            extraKeys: { "Ctrl-Space": "autocomplete" },
+            style: { textAlign: 'left' }
         });
 
         // Change mode based on selected language

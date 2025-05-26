@@ -495,47 +495,111 @@ class SolveProblemView(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post']  # Allow GET and POST for Swagger visibility
 
-    def coderunner(self, source_code, language, test_cases):
-        # Dummy implementation for testing
+    # def coderunner(self, source_code, language, test_cases):
+    #     # Dummy implementation for testing
 
-        status_choices = [
-            Submission.Status.PENDING,
-            Submission.Status.ACCEPTED,
-            Submission.Status.WRONG_ANSWER,
-            Submission.Status.TIME_LIMIT_EXCEEDED,
-            Submission.Status.MEMORY_LIMIT_EXCEEDED,
-            Submission.Status.RUNTIME_ERROR,
-            Submission.Status.COMPILATION_ERROR
-        ]
+    #     status_choices = [
+    #         Submission.Status.PENDING,
+    #         Submission.Status.ACCEPTED,
+    #         Submission.Status.WRONG_ANSWER,
+    #         Submission.Status.TIME_LIMIT_EXCEEDED,
+    #         Submission.Status.MEMORY_LIMIT_EXCEEDED,
+    #         Submission.Status.RUNTIME_ERROR,
+    #         Submission.Status.COMPILATION_ERROR
+    #     ]
 
-        final_results = []
-        for i, test_case in enumerate(test_cases):
-            # Randomly select a status
-            status = random.choice(status_choices)
+    #     final_results = []
+    #     for i, test_case in enumerate(test_cases):
+    #         # Randomly select a status
+    #         status = random.choice(status_choices)
             
-            # Generate dummy output based on status
-            if status == Submission.Status.ACCEPTED:
-                output = json.dumps(test_case['expected_output'])
-                error = None
+    #         # Generate dummy output based on status
+    #         if status == Submission.Status.ACCEPTED:
+    #             output = json.dumps(test_case['expected_output'])
+    #             error = None
+    #         else:
+    #             output = "No output"
+    #             error = "Dummy error message" if status in [
+    #                 Submission.Status.RUNTIME_ERROR,
+    #                 Submission.Status.COMPILATION_ERROR
+    #             ] else None
+
+    #         final_results.append({
+    #             "test_case": i + 1,
+    #             "output": output,
+    #             "expected": json.dumps(test_case['expected_output']),
+    #             "match": status == Submission.Status.ACCEPTED,
+    #             "error": error,
+    #             "status": status,
+    #             "time": f"{random.uniform(0.1, 2.0):.2f}s",
+    #             "memory": f"{random.randint(100, 1000)}KB"
+    #         })
+
+    #     return final_results
+
+    def coderunner(self, source_code, language):
+        # Judge0 API endpoint
+        JUDGE0_API_URL = "http://192.168.1.8:2358"
+        SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
+
+        lanugageMap = {
+            "python" : 71,
+            "javascript" : 63,
+            "java" : 62
+        }
+
+        # Prepare the request payload with CPU and memory limits
+        data = {
+            "source_code": source_code,
+            "language_id": lanugageMap[language],
+            "cpu_time_limit": 2,  # Max execution time in seconds
+            "memory_limit": 128000,  # Max memory in KB (128MB)
+        }
+
+        # # Submit the code
+        response = requests.post(SUBMISSION_URL, json=data)
+        token = response.json().get("token")
+
+        if not token:
+            print("Failed to get submission token.")
+            exit()
+
+        # # Fetch the result
+        RESULT_URL = f"{SUBMISSION_URL}/{token}"
+        while True:
+            result = requests.get(RESULT_URL).json()
+            if result["status"]["id"] in [1, 2]:  # Queued or Processing
+                # time.sleep(1)
+                pass
             else:
-                output = "No output"
-                error = "Dummy error message" if status in [
-                    Submission.Status.RUNTIME_ERROR,
-                    Submission.Status.COMPILATION_ERROR
-                ] else None
+                break
 
-            final_results.append({
-                "test_case": i + 1,
-                "output": output,
-                "expected": json.dumps(test_case['expected_output']),
-                "match": status == Submission.Status.ACCEPTED,
-                "error": error,
-                "status": status,
-                "time": f"{random.uniform(0.1, 2.0):.2f}s",
-                "memory": f"{random.randint(100, 1000)}KB"
-            })
+        # Print the output
+        return {
+            "output" : result.get("stdout", "No output"),
+            "error" : result.get("stderr", "No errors"),
+            "status" : result["status"]["description"],
+            "time" : str(result["time"]) + "s",
+            "memory" : str(result["memory"]) + "KB"
+        }
 
-        return final_results
+        # return {
+        #     "output" : "",
+        #     "error" : None,
+        #     "status" : "",
+        #     "time" : "",
+        #     "memory" : ""
+        # }
+    def notify_session_update(self, session_id, event_type, data):
+        channel_layer = get_channel_layer()
+        group_name = f'session_{session_id}'
+        async_to_sync(channel_layer.group_send)(
+            group_name,
+            {
+                'type': f'session_{event_type}',
+                'message': data
+            }
+        )
 
     def list(self, request):
         """List all problems available for solving"""

@@ -16,8 +16,18 @@ function App() {
         <Router>
           <div className="App">
             <Routes>
+              {/* Public routes */}
               <Route path="/login" element={<Login />} />
-              <Route path="/landing" element={<LandingPage />} />
+              
+              {/* Protected routes */}
+              <Route
+                path="/landing"
+                element={
+                  <ProtectedRoute>
+                    <LandingPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/editor"
                 element={
@@ -26,8 +36,20 @@ function App() {
                   </ProtectedRoute>
                 }
               />
-              <Route path="/problems/create" element={<CreateProblem />} />
+              <Route
+                path="/problems/create"
+                element={
+                  <ProtectedRoute>
+                    <CreateProblem />
+                  </ProtectedRoute>
+                }
+              />
+              
+              {/* Redirect root to landing page */}
               <Route path="/" element={<Navigate to="/landing" replace />} />
+              
+              {/* Catch all route - redirect to login */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </div>
         </Router>

@@ -495,48 +495,6 @@ class SolveProblemView(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post']  # Allow GET and POST for Swagger visibility
 
-    # def coderunner(self, source_code, language, test_cases):
-    #     # Dummy implementation for testing
-
-    #     status_choices = [
-    #         Submission.Status.PENDING,
-    #         Submission.Status.ACCEPTED,
-    #         Submission.Status.WRONG_ANSWER,
-    #         Submission.Status.TIME_LIMIT_EXCEEDED,
-    #         Submission.Status.MEMORY_LIMIT_EXCEEDED,
-    #         Submission.Status.RUNTIME_ERROR,
-    #         Submission.Status.COMPILATION_ERROR
-    #     ]
-
-    #     final_results = []
-    #     for i, test_case in enumerate(test_cases):
-    #         # Randomly select a status
-    #         status = random.choice(status_choices)
-            
-    #         # Generate dummy output based on status
-    #         if status == Submission.Status.ACCEPTED:
-    #             output = json.dumps(test_case['expected_output'])
-    #             error = None
-    #         else:
-    #             output = "No output"
-    #             error = "Dummy error message" if status in [
-    #                 Submission.Status.RUNTIME_ERROR,
-    #                 Submission.Status.COMPILATION_ERROR
-    #             ] else None
-
-    #         final_results.append({
-    #             "test_case": i + 1,
-    #             "output": output,
-    #             "expected": json.dumps(test_case['expected_output']),
-    #             "match": status == Submission.Status.ACCEPTED,
-    #             "error": error,
-    #             "status": status,
-    #             "time": f"{random.uniform(0.1, 2.0):.2f}s",
-    #             "memory": f"{random.randint(100, 1000)}KB"
-    #         })
-
-    #     return final_results
-
     def coderunner(self, source_code, language):
         # Judge0 API endpoint
         JUDGE0_API_URL = "http://localhost:2358"
@@ -583,13 +541,6 @@ class SolveProblemView(viewsets.ModelViewSet):
             "memory" : str(result["memory"]) + "KB"
         }
 
-        # return {
-        #     "output" : "",
-        #     "error" : None,
-        #     "status" : "",
-        #     "time" : "",
-        #     "memory" : ""
-        # }
     def notify_session_update(self, session_id, event_type, data):
         channel_layer = get_channel_layer()
         group_name = f'session_{session_id}'
@@ -653,23 +604,17 @@ class SolveProblemView(viewsets.ModelViewSet):
             game_session=session
         )
         
-        # # Run the code
-        # result = self.coderunner(
-        #     submission.code, 
-        #     submission.language, 
-        #     problem.test_cases
-        # )
-        
-        # Dummy result with all test cases passing
-        result = [
-            {'status': Submission.Status.ACCEPTED, 'output': 'Test case 1 passed'},
-            {'status': Submission.Status.ACCEPTED, 'output': 'Test case 2 passed'},
-            {'status': Submission.Status.ACCEPTED, 'output': 'Test case 3 passed'}
-        ]
+        # Run the code
+        result = self.coderunner(
+            submission.code, 
+            submission.language
+        )
 
         # Update submission status based on result
-        if all(r['status'] == Submission.Status.ACCEPTED for r in result):
+        if result.get('error') == 'No errors' and result.get('status') == 'Accepted':
             submission.status = Submission.Status.ACCEPTED
+            submission.execution_time = float(result.get('time', '0').replace('s', ''))
+            submission.memory_usage = float(result.get('memory', '0').replace('KB', ''))
             
             # Get the participation record
             participation = GameParticipation.objects.get(

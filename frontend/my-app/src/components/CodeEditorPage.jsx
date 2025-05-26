@@ -60,15 +60,23 @@ const CodeEditorPage = () => {
       }
 
       const data = await response.json();
+      
+      // Format the submission status message
+      let statusMessage = '';
+      if (data.result.error && data.result.error !== 'No errors') {
+        statusMessage = `Error: ${data.result.error}`;
+      } else {
+        statusMessage = `Status: ${data.result.status}\nOutput: ${data.result.output}\nExecution Time: ${data.result.time}\nMemory Usage: ${data.result.memory}`;
+      }
+
       setSubmissionStatus({
-        error: false,
-        message: data.result ? 'Submission successful!' : 'Submission failed',
+        error: data.result.error && data.result.error !== 'No errors',
+        message: statusMessage,
         ...data
       });
 
-      // If the session ended (problem solved), you might want to handle that
+      // If the session ended (problem solved), handle that
       if (data.session_ended) {
-        // Handle session end, maybe redirect or show a completion message
         console.log('Session ended - Problem solved!', data.leaderboard);
       }
     } catch (error) {
@@ -214,12 +222,14 @@ const CodeEditorPage = () => {
                 />
               </div>
               {submissionStatus && (
-                <div className={`mt-4 p-3 rounded ${
+                <div className={`mt-4 p-4 rounded ${
                   submissionStatus.error 
                     ? 'bg-red-100 text-red-700 border border-red-300' 
                     : 'bg-green-100 text-green-700 border border-green-300'
                 }`}>
-                  <p>{submissionStatus.message || JSON.stringify(submissionStatus)}</p>
+                  <pre className="whitespace-pre-wrap font-mono text-sm">
+                    {submissionStatus.message}
+                  </pre>
                 </div>
               )}
             </div>

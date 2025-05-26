@@ -5,7 +5,7 @@ import { java } from '@codemirror/lang-java';
 import { cpp } from '@codemirror/lang-cpp';
 import { python } from '@codemirror/lang-python';
 
-const CodeEditor = ({ initialCode = '// Type your code here' }) => {
+const CodeEditor = ({ initialCode = '// Type your code here', onCodeChange }) => {
   const [code, setCode] = useState(initialCode);
   const [language, setLanguage] = useState('javascript');
   
@@ -29,10 +29,16 @@ const CodeEditor = ({ initialCode = '// Type your code here' }) => {
     const newLanguage = e.target.value;
     setLanguage(newLanguage);
     setCode(languageTemplates[newLanguage]);
+    if (onCodeChange) {
+      onCodeChange({ code: languageTemplates[newLanguage], language: newLanguage });
+    }
   };
 
   const onChange = (value) => {
     setCode(value);
+    if (onCodeChange) {
+      onCodeChange({ code: value, language });
+    }
   };
 
   return (

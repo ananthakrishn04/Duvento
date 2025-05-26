@@ -6,13 +6,81 @@ import { useLocation } from 'react-router-dom';
 const CodeEditorPage = () => {
   const location = useLocation();
   const [problem, setProblem] = useState(null);
+  const [code, setCode] = useState('');
+  const [language, setLanguage] = useState('javascript');
+  const [submissionStatus, setSubmissionStatus] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     // Get problem data from location state
     if (location.state?.problem) {
+      console.log('Problem data received:', location.state.problem);
       setProblem(location.state.problem);
+    } else {
+      console.warn('No problem data in location state:', location.state);
     }
   }, [location]);
+
+  const handleCodeChange = ({ code: newCode, language: newLanguage }) => {
+    setCode(newCode);
+    setLanguage(newLanguage);
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmissionStatus(null);
+
+    // Check if we have a valid problem ID
+    if (!problem?.id) {
+      setSubmissionStatus({
+        error: true,
+        message: 'Invalid problem ID. Please try again.',
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/solve/${problem.id}/submit/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Token ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          code: code,
+          language: language,
+          session_id: location.state?.sessionId
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to submit code');
+      }
+
+      const data = await response.json();
+      setSubmissionStatus({
+        error: false,
+        message: data.result ? 'Submission successful!' : 'Submission failed',
+        ...data
+      });
+
+      // If the session ended (problem solved), you might want to handle that
+      if (data.session_ended) {
+        // Handle session end, maybe redirect or show a completion message
+        console.log('Session ended - Problem solved!', data.leaderboard);
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      setSubmissionStatus({
+        error: true,
+        message: error.message || 'Failed to submit code. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="w-full min-h-screen" style={{
@@ -140,8 +208,20 @@ const CodeEditorPage = () => {
             <div className="w-1/2 p-6 flex flex-col">
               <h3 className="font-['Open_Sans',Helvetica] font-semibold text-gray-800 mb-2">Code Editor</h3>
               <div className="flex-grow">
-                <CodeEditor initialCode={`// Write your solution for ${problem?.title || 'the problem'} here\n\n`} />
+                <CodeEditor 
+                  initialCode={`// Write your solution for ${problem?.title || 'the problem'} here\n\n`}
+                  onCodeChange={handleCodeChange}
+                />
               </div>
+              {submissionStatus && (
+                <div className={`mt-4 p-3 rounded ${
+                  submissionStatus.error 
+                    ? 'bg-red-100 text-red-700 border border-red-300' 
+                    : 'bg-green-100 text-green-700 border border-green-300'
+                }`}>
+                  <p>{submissionStatus.message || JSON.stringify(submissionStatus)}</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -157,8 +237,18 @@ const CodeEditorPage = () => {
             </div>
             
             <div className="flex items-center gap-3">
-              <button className="px-4 py-2 bg-gray-200 rounded flex items-center text-gray-700 hover:bg-gray-300 transition-colors">
-                <span className="font-['Open_Sans',Helvetica] font-semibold text-sm">Submit</span>
+              <button 
+                className={`px-4 py-2 rounded flex items-center transition-colors ${
+                  isSubmitting 
+                    ? 'bg-gray-300 cursor-not-allowed' 
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                }`}
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+              >
+                <span className="font-['Open_Sans',Helvetica] font-semibold text-sm">
+                  {isSubmitting ? 'Submitting...' : 'Submit'}
+                </span>
                 <ChevronRight size={16} className="ml-1" />
               </button>
               <button className="px-4 py-2 bg-[#c5051d] rounded flex items-center text-white hover:bg-red-700 transition-colors">

@@ -539,7 +539,7 @@ class SolveProblemView(viewsets.ModelViewSet):
 
     def coderunner(self, source_code, language):
         # Judge0 API endpoint
-        JUDGE0_API_URL = "http://192.168.1.8:2358"
+        JUDGE0_API_URL = "http://localhost:2358"
         SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
 
         lanugageMap = {

@@ -10,6 +10,10 @@ const Header = () => {
     logout();
     navigate('/login');
   };
+  
+  const handleProfileClick = () => {
+    navigate('/profile');
+  };
 
   return (
     <header className="flex justify-between items-center p-4 bg-white/80 backdrop-blur-lg rounded-xl mb-5 shadow-sm">
@@ -38,7 +42,11 @@ const Header = () => {
           </>
         )}
         
-        <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center cursor-pointer">
+        <div 
+          onClick={handleProfileClick}
+          className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-300 transition-colors"
+          title="View Profile"
+        >
           <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
             <circle cx="12" cy="7" r="4"></circle>

@@ -154,6 +154,78 @@ class CodingProfileView(viewsets.ModelViewSet):
             return CodingProfile.objects.filter(user=self.request.user)
         return super().get_queryset()
 
+    @action(detail=False, methods=['get'])
+    def game_history(self, request):
+        """Get the game history for the current user"""
+        profile = request.user.coding_profile
+        
+        # Get all game participations for this user
+        participations = GameParticipation.objects.filter(
+            profile=profile
+        ).select_related('game_session').order_by('-game_session__end_time')
+        
+        # Format the history data
+        history_data = []
+        
+        for participation in participations:
+            session = participation.game_session
+            
+            # Skip sessions that haven't ended
+            if not session.end_time:
+                continue
+                
+            # Find opponent in 1v1 games
+            opponent = None
+            if session.participants.count() == 2:
+                opponent = session.participants.exclude(id=profile.id).first()
+            
+            # Determine if user won (in 1v1 games)
+            result = "UNKNOWN"
+            if session.participants.count() == 2:
+                # Get the other participant's game participation
+                opponent_participation = GameParticipation.objects.filter(
+                    game_session=session,
+                    profile=opponent
+                ).first() if opponent else None
+                
+                if opponent_participation:
+                    if participation.problems_solved > opponent_participation.problems_solved:
+                        result = "WIN"
+                    elif participation.problems_solved < opponent_participation.problems_solved:
+                        result = "LOSE"
+                    else:
+                        # If same number of problems solved, compare time
+                        if participation.total_time < opponent_participation.total_time:
+                            result = "WIN"
+                        else:
+                            result = "LOSE"
+            
+            # Get problem info if available
+            problem = session.problems.first()
+            problem_info = {
+                'id': problem.id,
+                'title': problem.title
+            } if problem else None
+            
+            # Format the data
+            history_entry = {
+                'session_id': str(session.id),
+                'date': session.end_time.strftime('%b %d, %Y · %I:%M %p'),
+                'problem': problem_info,
+                'opponent': {
+                    'id': opponent.id,
+                    'display_name': opponent.display_name
+                } if opponent else None,
+                'result': result,
+                'problems_solved': participation.problems_solved,
+                'total_time': participation.total_time,
+                'score': participation.score
+            }
+            
+            history_data.append(history_entry)
+        
+        return Response(history_data)
+
 class CodingProblemView(viewsets.ModelViewSet):
     serializer_class = CodingProblemSerializer
     queryset = CodingProblem.objects.all()
@@ -666,7 +738,7 @@ class SolveProblemView(viewsets.ModelViewSet):
                     {"detail": "Not a participant in this session"}, 
                     status=status.HTTP_403_FORBIDDEN
                 )
-            
+        
             # Check if session is active
             if not game_session.is_active or (game_session.end_time and game_session.end_time < timezone.now()):
                 return Response(
@@ -738,7 +810,7 @@ class SolveProblemView(viewsets.ModelViewSet):
                 submission.execution_time = time_taken
                 submission.memory_usage = memory_used
                 submission.save()
-            
+
                 # Format output for response
                 output_data = {
                     "result": {
@@ -773,7 +845,7 @@ class SolveProblemView(viewsets.ModelViewSet):
                     game_session.is_active = False
                     game_session.end_time = timezone.now()
                     game_session.save()
-                    
+
                     # Set session_ended to true and prepare leaderboard
                     session_ended = True
                     leaderboard = self.get_leaderboard_data(game_session)

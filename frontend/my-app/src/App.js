@@ -9,6 +9,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LandingPage from './components/LandingPage';
 import CreateProblem from './components/CreateProblem';
 import ProfilePage from './components/ProfilePage';
+import AIKnowledgeAnalysis from './components/Ai_Analysis';
 
 function App() {
   return (
@@ -50,6 +51,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <ProfilePage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/analysis"
+                element={
+                  <ProtectedRoute>
+                    <AIKnowledgeAnalysis />
                   </ProtectedRoute>
                 }
               />

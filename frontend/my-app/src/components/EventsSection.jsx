@@ -14,23 +14,23 @@ const EventsSection = () => {
   
   const events = [
     {
-      image: '/api/placeholder/400/320',
+      image: 'code-sample-code-challenge.png',
       title: 'Coding Challenge',
       time: 'Live Now',
       badge: 'GAME'
     },
     {
-      image: '/api/placeholder/400/320',
+      image: 'algorithm-workshop.jpg',
       title: 'Algorithm Workshop',
       time: 'Today, 3:00 PM'
     },
     {
-      image: '/api/placeholder/400/320',
+      image: 'mlworkshop.jpg',
       title: 'ML Session',
       time: 'May 20, 5:00 PM'
     },
     {
-      image: '/api/placeholder/400/320',
+      image: 'webdevelopment.webp',
       title: 'Web Development',
       time: 'May 22, 2:00 PM'
     }

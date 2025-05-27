@@ -1,6 +1,31 @@
 import React from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const AIKnowledgeAnalysis = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const gameData = location.state?.gameData;
+
+  // If no game data is provided, show an error state
+  if (!gameData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-cyan-400 via-blue-500 to-blue-600 p-5">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-white rounded-xl shadow-lg p-8 text-center">
+            <h2 className="text-2xl font-bold text-gray-800 mb-4">No Game Data Available</h2>
+            <p className="text-gray-600 mb-6">Please select a game from your history to view its analysis.</p>
+            <button
+              onClick={() => navigate('/profile')}
+              className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              Return to Profile
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Progress Bar Component
   const ProgressBar = ({ percentage, color = 'blue', label, description }) => {
     const getColorClasses = (color) => {
@@ -49,70 +74,74 @@ const AIKnowledgeAnalysis = () => {
     );
   };
 
-  // Sample data - in a real app, this would come from props or API
-  const userData = {
-    name: "John Smith",
-    role: "Java Developer • Intermediate Level",
-    generatedDate: "May 12, 2025",
-    analysisId: "AA-2025-05-12-JS"
+  // Generate analysis based on game data
+  const generateAnalysis = (gameData) => {
+    const strengths = [];
+    const gaps = [];
+    
+    // Analyze based on game result
+    if (gameData.result === 'WIN') {
+      strengths.push({
+        label: "Problem Solving Speed",
+        percentage: 90,
+        description: "Excellent performance in solving the problem quickly and efficiently."
+      });
+    } else {
+      gaps.push({
+        label: "Problem Solving Speed",
+        percentage: 60,
+        description: "There's room for improvement in solving problems more quickly."
+      });
+    }
+
+    // Add problem-specific analysis
+    if (gameData.problem) {
+      strengths.push({
+        label: `${gameData.problem.title} Concepts`,
+        percentage: gameData.result === 'WIN' ? 85 : 70,
+        description: `Understanding of concepts related to ${gameData.problem.title}.`
+      });
+    }
+
+    // Add competitive analysis
+    if (gameData.opponent) {
+      const competitiveScore = gameData.result === 'WIN' ? 95 : 75;
+      strengths.push({
+        label: "Competitive Programming",
+        percentage: competitiveScore,
+        description: "Ability to solve problems under time pressure in competitive scenarios."
+      });
+    }
+
+    return {
+      strengths,
+      gaps
+    };
   };
 
-  const strengths = [
-    {
-      label: "Algorithm Implementation",
-      percentage: 92,
-      description: "Excellent ability to implement various algorithms efficiently. You consistently write clean, optimized code."
-    },
-    {
-      label: "Problem Solving", 
-      percentage: 88,
-      description: "Strong analytical skills and creative approach to solving complex problems."
-    },
-    {
-      label: "Data Structures",
-      percentage: 85,
-      description: "Good understanding of when and how to use appropriate data structures."
-    }
-  ];
+  const analysis = generateAnalysis(gameData);
 
-  const knowledgeGaps = [
-    {
-      label: "Design Patterns",
-      percentage: 45,
-      description: "Limited application of common design patterns. This impacts code maintainability and scalability."
-    },
-    {
-      label: "System Architecture",
-      percentage: 38,
-      description: "Need to improve understanding of designing scalable and maintainable systems."
-    },
-    {
-      label: "Testing Practices",
-      percentage: 52,
-      description: "Inconsistent test coverage and limited use of testing methodologies."
-    }
-  ];
-
+  // Course recommendations based on game performance
   const courseRecommendations = [
     {
-      title: "Design Patterns Mastery Course",
-      description: "Learn practical applications of common design patterns with real-world examples. This course covers creational, structural, and behavioral patterns.",
+      title: "Advanced Problem Solving Techniques",
+      description: "Master advanced algorithms and problem-solving strategies for competitive programming.",
       weeks: 4,
       modules: 12,
       completionRate: 94
     },
     {
-      title: "System Architecture: From Monolith to Microservices", 
-      description: "Comprehensive guide to modern system architecture principles, focusing on scalability, fault tolerance, and maintainable design.",
-      weeks: 6,
-      modules: 18,
-      completionRate: 88
-    },
-    {
-      title: "Test-Driven Development Workshop",
-      description: "Practical workshop on implementing TDD in your workflow, covering unit testing, integration testing, and test automation.",
+      title: "Time Management in Coding Challenges",
+      description: "Learn to optimize your approach and manage time effectively during coding competitions.",
       weeks: 2,
       modules: 8,
+      completionRate: 96
+    },
+    {
+      title: "Data Structures Deep Dive",
+      description: "Comprehensive coverage of essential data structures for efficient problem solving.",
+      weeks: 6,
+      modules: 15,
       completionRate: 92
     }
   ];
@@ -140,35 +169,33 @@ const AIKnowledgeAnalysis = () => {
                     Duvento
                   </div>
                   <div className="text-gray-500 text-sm">
-                    AI Knowledge Analysis
+                    Game Performance Analysis
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center text-white font-bold text-lg">
-                    JS
+                    {gameData.opponent ? gameData.opponent.display_name.charAt(0) : 'G'}
                   </div>
                   <div>
-                    <h2 className="text-xl font-bold text-gray-800">{userData.name}</h2>
-                    <p className="text-gray-600">{userData.role}</p>
+                    <h2 className="text-xl font-bold text-gray-800">Game Analysis</h2>
+                    <p className="text-gray-600">
+                      {gameData.problem ? gameData.problem.title : 'Coding Challenge'} • {gameData.date}
+                    </p>
                   </div>
                 </div>
               </div>
               <div className="text-right">
                 <div className="flex gap-2 mb-2">
-                  <div className="w-8 h-8 bg-yellow-400 rounded-full flex items-center justify-center cursor-pointer hover:bg-yellow-500 transition-colors">
+                  <button
+                    onClick={() => navigate('/profile')}
+                    className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-400 transition-colors"
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+                      <path d="M19 12H5M12 19l-7-7 7-7"/>
                     </svg>
-                  </div>
-                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-400 transition-colors">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                      <circle cx="12" cy="7" r="4"></circle>
-                    </svg>
-                  </div>
+                  </button>
                 </div>
-                <p className="text-sm text-gray-500">Generated: {userData.generatedDate}</p>
+                <p className="text-sm text-gray-500">Analysis ID: GA-{new Date().getTime()}</p>
               </div>
             </div>
           </div>
@@ -176,11 +203,10 @@ const AIKnowledgeAnalysis = () => {
           {/* AI Analysis Summary */}
           <div className="p-6">
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6">
-              <h3 className="text-lg font-semibold text-blue-800 mb-2">AI Analysis Summary</h3>
+              <h3 className="text-lg font-semibold text-blue-800 mb-2">Game Performance Summary</h3>
               <p className="text-gray-700 text-sm leading-relaxed">
-                Based on your performance across 5 coding challenges and 3 knowledge assessments, our AI has identified several areas of strength and some knowledge 
-                gaps. Your strong algorithm implementation and problem-solving skills could benefit from improving your knowledge of design patterns and system 
-                architecture. Recommendations for targeted learning have been provided below.
+                Based on your performance in this {gameData.result.toLowerCase()} against {gameData.opponent ? gameData.opponent.display_name : 'other players'}, 
+                we've analyzed your coding approach and problem-solving strategies. Here's a detailed breakdown of your strengths and areas for improvement.
               </p>
             </div>
 
@@ -189,7 +215,7 @@ const AIKnowledgeAnalysis = () => {
               {/* Your Strengths */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">Your Strengths</h3>
-                {strengths.map((strength, index) => (
+                {analysis.strengths.map((strength, index) => (
                   <ProgressBar
                     key={index}
                     label={strength.label}
@@ -202,8 +228,8 @@ const AIKnowledgeAnalysis = () => {
 
               {/* Knowledge Gaps */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Knowledge Gaps</h3>
-                {knowledgeGaps.map((gap, index) => (
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Areas for Improvement</h3>
+                {analysis.gaps.map((gap, index) => (
                   <ProgressBar
                     key={index}
                     label={gap.label}
@@ -217,7 +243,7 @@ const AIKnowledgeAnalysis = () => {
 
             {/* Personalized Learning Recommendations */}
             <div className="mb-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Personalized Learning Recommendations</h3>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">Recommended Next Steps</h3>
               <div className="space-y-4">
                 {courseRecommendations.map((course, index) => (
                   <CourseCard
@@ -235,7 +261,9 @@ const AIKnowledgeAnalysis = () => {
             {/* Footer */}
             <div className="flex flex-col sm:flex-row justify-between items-center pt-6 border-t border-gray-200 gap-4">
               <div className="text-sm text-gray-500">
-                Analysis ID: {userData.analysisId}
+                Game Result: <span className={`font-medium ${
+                  gameData.result === 'WIN' ? 'text-green-600' : 'text-red-600'
+                }`}>{gameData.result}</span>
               </div>
               <div className="flex gap-3">
                 <button 

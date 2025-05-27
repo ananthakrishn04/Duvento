@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const HistorySection = () => {
   const [historyData, setHistoryData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchGameHistory = async () => {
@@ -31,6 +33,15 @@ const HistorySection = () => {
 
     fetchGameHistory();
   }, []);
+
+  const handleRowClick = (item) => {
+    navigate('/analysis', { 
+      state: { 
+        gameData: item,
+        analysisType: 'game_performance'
+      } 
+    });
+  };
 
   // Loading state
   if (loading) {
@@ -96,7 +107,11 @@ const HistorySection = () => {
         </thead>
         <tbody>
           {historyData.map((item, index) => (
-            <tr key={index} className="hover:bg-gray-50">
+            <tr 
+              key={index} 
+              className="hover:bg-gray-50 cursor-pointer transition-colors"
+              onClick={() => handleRowClick(item)}
+            >
               <td className="py-3 px-4 border-b border-gray-50 text-gray-600">{item.date}</td>
               <td className="py-3 px-4 border-b border-gray-50 text-gray-600">
                 {item.problem ? item.problem.title : 'Unknown Problem'}

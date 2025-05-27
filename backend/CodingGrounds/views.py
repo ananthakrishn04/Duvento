@@ -552,6 +552,70 @@ class GameSessionView(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    @action(detail=True, methods=['post'])
+    def timeout(self, request, pk=None):
+        """Handle when the game timer runs out"""
+        try:
+            session = self.get_object()
+            profile = request.user.coding_profile
+            
+            # Check if user is a participant
+            if not session.participants.filter(id=profile.id).exists():
+                return Response(
+                    {"detail": "Not a participant in this session"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Mark the session as ended
+            session.is_active = False
+            session.end_time = timezone.now()
+            session.save()
+            
+            # Get leaderboard data
+            leaderboard_data = self.get_leaderboard_data(session)
+            
+            # Determine the winner based on most problems solved
+            winner = None
+            max_solved = -1
+            
+            for participation in session.participations.all().order_by('-problems_solved', 'total_time'):
+                if participation.problems_solved > max_solved:
+                    max_solved = participation.problems_solved
+                    winner = participation.profile
+            
+            # If no clear winner (tie or no problems solved), the winner is null
+            winner_data = None
+            if winner:
+                winner_data = {
+                    'id': winner.id,
+                    'username': winner.user.username,
+                    'display_name': winner.display_name
+                }
+            
+            # Notify all participants about the timeout
+            WebSocketManager.notify_session_update(
+                str(session.id),
+                'game_end', 
+                {
+                    'type': 'game_ended',
+                    'timeout': True,
+                    'winner': winner_data,
+                    'leaderboard': leaderboard_data
+                }
+            )
+            
+            return Response({
+                "detail": "Session ended due to timeout",
+                "leaderboard": leaderboard_data,
+                "winner": winner_data
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response(
+                {"detail": f"Error ending session: {str(e)}"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
 class GameParticipationView(viewsets.ModelViewSet):
     serializer_class = GameParticipationSerializer
     queryset = GameParticipation.objects.all()

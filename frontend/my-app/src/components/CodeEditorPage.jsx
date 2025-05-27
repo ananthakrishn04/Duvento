@@ -17,6 +17,89 @@ const CodeEditorPage = () => {
   const [winnerData, setWinnerData] = useState(null);
   const [leaderboardData, setLeaderboardData] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [timeRemaining, setTimeRemaining] = useState(15 * 60); // 15 minutes in seconds
+
+  // Convert seconds to minutes:seconds format
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+  };
+
+  // Timer effect
+  useEffect(() => {
+    let timerInterval;
+    
+    if (location.state?.problem) {
+      // Start the timer
+      timerInterval = setInterval(() => {
+        setTimeRemaining(prevTime => {
+          if (prevTime <= 1) {
+            // Timer has reached zero, clear interval
+            clearInterval(timerInterval);
+            // End the session
+            handleTimeUp();
+            return 0;
+          }
+          return prevTime - 1;
+        });
+      }, 1000);
+    }
+    
+    // Cleanup timer on unmount
+    return () => {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+      }
+    };
+  }, [location.state?.problem]);
+
+  // Handle time up
+  const handleTimeUp = async () => {
+    // Only proceed if we haven't already shown the winner popup
+    if (showWinnerPopup) return;
+    
+    try {
+      // Call an API to mark the session as ended due to timeout
+      if (location.state?.sessionId) {
+        const response = await fetch(`http://localhost:8000/api/sessions/${location.state.sessionId}/timeout/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Token ${localStorage.getItem('token')}`,
+          }
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          // Show the timeout notification
+          setWinnerData({
+            display_name: "Time's up!",
+            isTimeout: true
+          });
+          if (data.leaderboard) {
+            setLeaderboardData(data.leaderboard);
+          }
+          setShowWinnerPopup(true);
+        }
+      } else {
+        // If no session ID, just show a generic timeout popup
+        setWinnerData({
+          display_name: "Time's up!",
+          isTimeout: true
+        });
+        setShowWinnerPopup(true);
+      }
+    } catch (error) {
+      console.error('Error handling time up:', error);
+      // Show a generic timeout popup even if the API call fails
+      setWinnerData({
+        display_name: "Time's up!",
+        isTimeout: true
+      });
+      setShowWinnerPopup(true);
+    }
+  };
 
   useEffect(() => {
     // Get problem data from location state
@@ -45,7 +128,19 @@ const CodeEditorPage = () => {
           if (data.type === 'game_ended') {
             // Game has ended with a winner
             console.log('Game ended notification received', data);
-            setWinnerData(data.winner);
+            
+            // Update timeout status if this was a timeout
+            if (data.timeout) {
+              // Set timer to 0 to update progress bar
+              setTimeRemaining(0);
+              setWinnerData({
+                ...data.winner,
+                isTimeout: true
+              });
+            } else {
+              setWinnerData(data.winner);
+            }
+            
             setLeaderboardData(data.leaderboard);
             setShowWinnerPopup(true);
           }
@@ -220,11 +315,15 @@ const CodeEditorPage = () => {
             <div className="text-center mb-4">
               <div className="w-20 h-20 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={winnerData.isTimeout ? "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"} />
                 </svg>
               </div>
               <h3 className="text-2xl font-bold text-gray-800 mb-2">Game Over!</h3>
-              {winnerData.id === (location.state?.profile?.id || -1) ? (
+              {winnerData.isTimeout ? (
+                <p className="text-lg text-orange-600 font-semibold mb-4">
+                  Time's up! The game has ended.
+                </p>
+              ) : winnerData.id === (location.state?.profile?.id || -1) ? (
                 <p className="text-lg text-green-600 font-semibold mb-4">
                   Congratulations! You won the game!
                 </p>
@@ -300,16 +399,14 @@ const CodeEditorPage = () => {
                 <div className="text-sm text-gray-500">You</div>
                 <div className="font-semibold text-gray-800">Player1</div>
               </div>
+            </div>
+            <div className="flex items-center justify-center">
               <div className="flex items-center">
-                <Clock size={18} className="text-blue-600 mr-2" />
-                <div className="font-semibold text-xl text-gray-800">10:00</div>
+                <Clock size={20} className="text-blue-600 mr-2" />
+                <div className="font-semibold text-2xl text-gray-800">{formatTime(timeRemaining)}</div>
               </div>
             </div>
             <div className="flex items-center">
-              <div className="flex items-center mr-12">
-                <Clock size={18} className="text-red-600 mr-2" />
-                <div className="font-semibold text-xl text-gray-800">05:30</div>
-              </div>
               <div>
                 <div className="text-sm text-gray-500">Opponent</div>
                 <div className="font-semibold text-gray-800">Player2</div>
@@ -373,8 +470,28 @@ const CodeEditorPage = () => {
 
             {/* Timeline separator - vertical time progress */}
             <div className="h-full w-[5px] bg-gray-100 relative">
-              <div className="absolute left-0 top-0 bottom-[60%] w-full bg-blue-500"></div>
-              <div className="absolute left-[-6px] top-[40%] w-4 h-4 rounded-full bg-blue-600 border-2 border-white"></div>
+              {/* Calculate progress from 0% (15 min) to 100% (0 min) */}
+              {(() => {
+                // When timeRemaining = 15*60, progressPercent = 0
+                // When timeRemaining = 0, progressPercent = 100
+                const totalTime = 15 * 60; // 15 minutes in seconds
+                const elapsedTime = totalTime - timeRemaining;
+                const progressPercent = (elapsedTime / totalTime) * 100;
+                
+                return (
+                  <div 
+                    className="absolute left-0 top-0 w-full bg-blue-500 transition-all duration-1000" 
+                    style={{ height: `${progressPercent}%` }}
+                  ></div>
+                );
+              })()}
+              <div 
+                className="absolute left-[-6px] w-4 h-4 rounded-full bg-blue-600 border-2 border-white transition-all duration-1000"
+                style={{ 
+                  top: `${((15 * 60 - timeRemaining) / (15 * 60)) * 100}%`, 
+                  transform: 'translateY(-50%)' 
+                }}
+              ></div>
             </div>
             
             {/* Right panel - Code editor */}

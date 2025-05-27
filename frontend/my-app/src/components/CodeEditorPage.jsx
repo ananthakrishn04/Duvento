@@ -12,12 +12,58 @@ const CodeEditorPage = () => {
   const [submissionStatus, setSubmissionStatus] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showQuitWarning, setShowQuitWarning] = useState(false);
+  const [passedTests, setPassedTests] = useState(0);
+  const [showWinnerPopup, setShowWinnerPopup] = useState(false);
+  const [winnerData, setWinnerData] = useState(null);
+  const [leaderboardData, setLeaderboardData] = useState(null);
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
     // Get problem data from location state
     if (location.state?.problem) {
       console.log('Problem data received:', location.state.problem);
       setProblem(location.state.problem);
+      
+      // Log profile information for debugging
+      console.log('Current user profile:', location.state?.profile);
+
+      // Setup WebSocket connection for game updates
+      if (location.state?.sessionId) {
+        const sessionId = location.state.sessionId;
+        // Connect to WebSocket for real-time updates
+        const ws = new WebSocket(`ws://localhost:8000/ws/game/${sessionId}/`);
+        
+        ws.onopen = () => {
+          console.log('WebSocket connection established');
+        };
+        
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          console.log('WebSocket message received:', data);
+          
+          // Handle different message types
+          if (data.type === 'game_ended') {
+            // Game has ended with a winner
+            console.log('Game ended notification received', data);
+            setWinnerData(data.winner);
+            setLeaderboardData(data.leaderboard);
+            setShowWinnerPopup(true);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+        
+        setSocket(ws);
+        
+        // Cleanup WebSocket connection when component unmounts
+        return () => {
+          if (ws) {
+            ws.close();
+          }
+        };
+      }
     } else {
       console.warn('No problem data in location state:', location.state);
     }
@@ -52,7 +98,8 @@ const CodeEditorPage = () => {
         body: JSON.stringify({
           code: code,
           language: language,
-          session_id: location.state?.sessionId
+          session_id: location.state?.sessionId,
+          profile_id: location.state?.profile?.id // Include profile ID for better tracking
         }),
       });
 
@@ -77,9 +124,17 @@ const CodeEditorPage = () => {
         ...data
       });
 
+      // Update the passed tests count if available in the response
+      if (data.passed !== undefined) {
+        setPassedTests(data.passed);
+      }
+
       // If the session ended (problem solved), handle that
       if (data.session_ended) {
         console.log('Session ended - Problem solved!', data.leaderboard);
+        setWinnerData(data.winner);
+        setLeaderboardData(data.leaderboard);
+        setShowWinnerPopup(true);
       }
     } catch (error) {
       console.error('Submission error:', error);
@@ -109,9 +164,9 @@ const CodeEditorPage = () => {
       }
 
       // Close WebSocket if it exists
-      // if (currentWebSocket) {
-      //   currentWebSocket.close();
-      // }
+      if (socket) {
+        socket.close();
+      }
 
       // Navigate back to landing page
       navigate('/landing');
@@ -119,6 +174,11 @@ const CodeEditorPage = () => {
       console.error('Error leaving session:', error);
       alert('Failed to leave session. Please try again.');
     }
+  };
+
+  const handleWinnerContinue = () => {
+    setShowWinnerPopup(false);
+    navigate('/landing');
   };
 
   return (
@@ -147,6 +207,54 @@ const CodeEditorPage = () => {
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
               >
                 Quit Game
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Winner Popup Modal */}
+      {showWinnerPopup && winnerData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="text-center mb-4">
+              <div className="w-20 h-20 mx-auto bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-2xl font-bold text-gray-800 mb-2">Game Over!</h3>
+              {winnerData.id === (location.state?.profile?.id || -1) ? (
+                <p className="text-lg text-green-600 font-semibold mb-4">
+                  Congratulations! You won the game!
+                </p>
+              ) : (
+                <p className="text-lg text-blue-600 font-semibold mb-4">
+                  {winnerData.display_name} has won the game!
+                </p>
+              )}
+            </div>
+            
+            {leaderboardData && leaderboardData.length > 0 && (
+              <div className="mb-6">
+                <h4 className="font-semibold text-gray-700 mb-2">Leaderboard</h4>
+                <div className="bg-gray-50 rounded p-3 max-h-40 overflow-auto">
+                  {leaderboardData.map((player, index) => (
+                    <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
+                      <span className="font-medium">{index + 1}. {player.username}</span>
+                      <span className="text-sm text-gray-500">Score: {player.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div className="text-center">
+              <button
+                onClick={handleWinnerContinue}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
+              >
+                Back to Home
               </button>
             </div>
           </div>
@@ -296,7 +404,7 @@ const CodeEditorPage = () => {
           <div className="w-full h-14 bg-white border-t border-[#00000029] px-6 flex justify-between items-center">
             <div className="flex items-center gap-4">
               <div className="font-['Open_Sans',Helvetica] text-gray-700">
-                <span className="font-semibold">Hidden Case:</span> 3/5 Passed
+                <span className="font-semibold">Hidden Case:</span> {passedTests}/{problem?.test_cases?.length || 0} Passed
               </div>
               <div className="font-['Open_Sans',Helvetica] text-gray-700">
                 <span className="font-semibold">Game ID:</span> GC-12345

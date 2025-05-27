@@ -1,6 +1,6 @@
 import { EyeIcon } from "lucide-react";
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Checkbox } from "../components/ui/checkbox";
@@ -163,12 +163,24 @@ export const Login = () => {
               {/* Continue button */}
               <Button
                 type="submit"
+                onClick={handleSubmit}
                 className="w-full h-[41px] bg-[#2196f3] hover:bg-[#1976d2]"
               >
                 <div className="font-['Open_Sans',Helvetica] font-semibold text-white text-sm text-center">
                   CONTINUE
                 </div>
               </Button>
+
+              {/* Register link */}
+              <div className="text-center text-sm">
+                Don't have an account?{" "}
+                <Link
+                  to="/register"
+                  className="text-[#2196f3] hover:underline"
+                >
+                  Register here
+                </Link>
+              </div>
             </form>
           </CardContent>
         </Card>

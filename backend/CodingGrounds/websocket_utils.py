@@ -25,7 +25,7 @@ class WebSocketManager:
             'leave': ['type', 'profile'],
             'ready': ['type', 'profile', 'all_ready'],
             'start': ['type', 'start_time', 'problem'],
-            'end': ['type', 'detail', 'winner', 'leaderboard']
+            'game_end': ['type', 'winner', 'leaderboard']
         }
         
         if event_type not in required_fields:

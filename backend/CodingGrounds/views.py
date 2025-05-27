@@ -495,105 +495,184 @@ class SolveProblemView(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     http_method_names = ['get', 'post']  # Allow GET and POST for Swagger visibility
 
-    def coderunner(self, source_code, language):
-        # Judge0 API endpoint
-        JUDGE0_API_URL = "http://localhost:2358"
-        SUBMISSION_URL = f"{JUDGE0_API_URL}/submissions"
-
-        lanugageMap = {
-            "python" : 71,
-            "javascript" : 63,
-            "java" : 62
-        }
-
-        # Prepare the request payload with CPU and memory limits
-        data = {
-            "source_code": source_code,
-            "language_id": lanugageMap[language],
-            "cpu_time_limit": 2,  # Max execution time in seconds
-            "memory_limit": 128000,  # Max memory in KB (128MB)
-        }
-
-        # # Submit the code
-        response = requests.post(SUBMISSION_URL, json=data)
-        token = response.json().get("token")
-
-        if not token:
-            print("Failed to get submission token.")
-            exit()
-
-        # # Fetch the result
-        RESULT_URL = f"{SUBMISSION_URL}/{token}"
-        while True:
-            result = requests.get(RESULT_URL).json()
-            if result["status"]["id"] in [1, 2]:  # Queued or Processing
-                # time.sleep(1)
-                pass
-            else:
-                break
-
-        # Print the output
-        return {
-            "output" : result.get("stdout", "No output"),
-            "error" : result.get("stderr", "No errors"),
-            "status" : result["status"]["description"],
-            "time" : str(result["time"]) + "s",
-            "memory" : str(result["memory"]) + "KB"
-        }
-
-    def notify_session_update(self, session_id, event_type, data):
-        channel_layer = get_channel_layer()
-        group_name = f'session_{session_id}'
-        async_to_sync(channel_layer.group_send)(
-            group_name,
-            {
-                'type': f'session_{event_type}',
-                'message': data
+    def get_leaderboard_data(self, session):
+        """Helper method to get leaderboard data"""
+        participants_data = []
+        for participation in GameParticipation.objects.filter(game_session=session).order_by('-problems_solved', 'total_time'):
+            minutes, seconds = divmod(participation.total_time, 60)
+            formatted_time = f"{minutes:02d}:{seconds:02d}"
+            
+            participant_data = {
+                'profile_id': participation.profile.id,
+                'username': participation.profile.display_name,
+                'problems_solved': participation.problems_solved,
+                'total_time': participation.total_time,
+                'formatted_time': formatted_time,
+                'score': participation.score
             }
-        )
+            participants_data.append(participant_data)
+        return participants_data
 
-    def list(self, request):
-        """List all problems available for solving"""
-        problems = CodingProblem.objects.all()
-        serializer = CodingProblemSerializer(problems, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['get'])
-    def details(self, request, problem_id=None):
-        """Get details of a specific problem"""
-        problem = get_object_or_404(CodingProblem, id=problem_id)
-        serializer = CodingProblemSerializer(problem)
-        return Response(serializer.data)
+    def coderunner(self, code, language, stdin=""):
+        # File extensions mapping for different languages
+        extensions = {
+            'python': 'py',
+            'python3': 'py',
+            'javascript': 'js',
+            'node': 'js',
+            'java': 'java',
+            'cpp': 'cpp',
+            'c++': 'cpp',
+            'c': 'c',
+            'csharp': 'cs',
+            'c#': 'cs',
+            'go': 'go',
+            'golang': 'go',
+            'rust': 'rs',
+            'php': 'php',
+            'ruby': 'rb',
+            'kotlin': 'kt',
+            'swift': 'swift',
+            'typescript': 'ts',
+            'ts': 'ts',
+            'scala': 'scala',
+            'perl': 'pl',
+            'lua': 'lua',
+            'r': 'r',
+            'haskell': 'hs',
+            'dart': 'dart',
+            'elixir': 'ex',
+            'julia': 'jl',
+            'fortran': 'f90',
+            'cobol': 'cob',
+            'pascal': 'pas',
+            'assembly': 'asm',
+            'bash': 'sh',
+            'shell': 'sh',
+            'powershell': 'ps1'
+        }
+        
+        # Prepare the API payload
+        payload = {
+            "language": language.lower(),
+            "version": "3",
+            "files": [
+                {
+                    "name": f"main.{extensions.get(language.lower(), 'txt')}",
+                    "content": code
+                }
+            ],
+            "stdin": stdin,
+            "args": [],
+            "compile_timeout": 10000,
+            "run_timeout": 3000,
+            "compile_memory_limit": -1,
+            "run_memory_limit": -1
+        }
+        
+        try:
+            # Make the API request to Piston
+            response = requests.post(
+                "https://emkc.org/api/v2/piston/execute",
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "PistonExecutor/1.0"
+                },
+                data=json.dumps(payload),
+                timeout=30
+            )
+            
+            # Check if request was successful
+            response.raise_for_status()
+            
+            # Parse and return the JSON response
+            result = response.json()
+            
+            # Format the response for easier access
+            formatted_result = {
+                "language": result.get("language", ""),
+                "version": result.get("version", ""),
+                "stdout": result.get("run", {}).get("stdout", ""),
+                "stderr": result.get("run", {}).get("stderr", ""),
+                "code": result.get("run", {}).get("code", 0),
+                "signal": result.get("run", {}).get("signal", None),
+                "compile": result.get("compile", {}),
+                "raw_response": result
+            }
+            
+            print(formatted_result)
+            return formatted_result
+            
+        except requests.exceptions.Timeout:
+            return {
+                "error": "Request timeout - execution took too long",
+                "stdout": "",
+                "stderr": "",
+                "code": -1
+            }
+        except requests.exceptions.ConnectionError:
+            return {
+                "error": "Connection error - could not reach Piston API",
+                "stdout": "",
+                "stderr": "",
+                "code": -1
+            }
+        except requests.exceptions.HTTPError as e:
+            return {
+                "error": f"HTTP error: {e.response.status_code} - {e.response.text}",
+                "stdout": "",
+                "stderr": "",
+                "code": -1
+            }
+        except requests.exceptions.RequestException as e:
+            return {
+                "error": f"Request failed: {str(e)}",
+                "stdout": "",
+                "stderr": "",
+                "code": -1
+            }
+        except json.JSONDecodeError:
+            return {
+                "error": "Invalid JSON response from API",
+                "stdout": "",
+                "stderr": "",
+                "code": -1
+            }
+        except Exception as e:
+            return {
+                "error": f"Unexpected error: {str(e)}",
+                "stdout": "",
+                "stderr": "",
+                "code": -1
+            }
 
     @action(detail=True, methods=['post'])
     def submit(self, request, problem_id=None):
         """Submit a solution for a problem"""
         problem = get_object_or_404(CodingProblem, id=problem_id)
-        
-        # Get session_id from request data
-        session_id = request.data.get('session_id')
-        if not session_id:
-            return Response(
-                {"detail": "Session ID is required"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        session = get_object_or_404(GameSession, id=session_id)
         profile = request.user.coding_profile
         
-        # Check if user is a participant in the session
-        if not session.participants.filter(id=profile.id).exists():
-            return Response(
-                {"detail": "Not a participant in this session"}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Get session_id from request data (optional)
+        session_id = request.data.get('session_id')
+        game_session = None
         
-        # Check if session is active
-        if not session.is_active or (session.end_time and session.end_time < timezone.now()):
-            return Response(
-                {"detail": "Session is not active"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        # If session provided, validate it
+        if session_id:
+            game_session = get_object_or_404(GameSession, id=session_id)
+            
+            # Check if user is a participant in the session
+            if not game_session.participants.filter(id=profile.id).exists():
+                return Response(
+                    {"detail": "Not a participant in this session"}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Check if session is active
+            if not game_session.is_active or (game_session.end_time and game_session.end_time < timezone.now()):
+                return Response(
+                    {"detail": "Session is not active"}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         # Create submission
         submission = Submission.objects.create(
@@ -601,91 +680,154 @@ class SolveProblemView(viewsets.ModelViewSet):
             problem=problem,
             code=request.data.get('code'),
             language=request.data.get('language', 'python'),
-            game_session=session
+            game_session=game_session
         )
         
-        # Run the code
-        result = self.coderunner(
-            submission.code, 
-            submission.language
-        )
+        # Run the code with test cases if available
+        try:
+            # Get test cases from the problem
+            testcases = problem.test_cases if hasattr(problem, 'test_cases') and problem.test_cases else []
+            
+            passed = 0
 
-        # Update submission status based on result
-        if result.get('error') == 'No errors' and result.get('status') == 'Accepted':
-            submission.status = Submission.Status.ACCEPTED
-            submission.execution_time = float(result.get('time', '0').replace('s', ''))
-            submission.memory_usage = float(result.get('memory', '0').replace('KB', ''))
+            for i in range(len(testcases)):
+                # Prepare input if test cases are available
+                stdin = ""
+
+                if testcases and len(testcases) > 0 and 'input' in testcases[i]:
+                    stdin = testcases[i]['input']
             
-            # Get the participation record
-            participation = GameParticipation.objects.get(
-                game_session=session,
-                profile=profile
-            )
-            
-            # Check if this is the first time this user solved this problem in this session
-            previous_accepted = Submission.objects.filter(
-                profile=profile,
-                problem=problem,
-                game_session=session,
-                status=Submission.Status.ACCEPTED
-            ).exclude(pk=submission.pk).exists()
-            
-            if not previous_accepted:
-                # Update participation statistics
-                participation.problems_solved += 1
-                
-                # Calculate time since session start
-                time_delta = submission.submitted_at - session.start_time
-                seconds = int(time_delta.total_seconds())
-                
-                # Add to total time (used for tie-breaking)
-                participation.total_time += seconds
-                participation.save()
-                
-                # End the session since someone solved it
-                session.end_time = timezone.now()
-                session.is_active = False
-                session.save()
-                
-                # Notify all participants of session end
-                WebSocketManager.notify_session_update(
-                    session_id,
-                    'end',
-                    {
-                        'type': 'session_end',
-                        'detail': "Session has ended - problem solved!",
-                        'winner': profile.display_name,
-                        'leaderboard': GameSessionView().get_leaderboard_data(session)
-                    }
+                # Run the code
+                result = self.coderunner(
+                    submission.code, 
+                    submission.language,
+                    stdin
                 )
-        else:
-            submission.status = Submission.Status.WRONG_ANSWER
-        
-        # Save the updated submission
-        submission.save()
-        
-        # Update user profile
-        profile.update_streak()
-        
-        return Response({
-            'submission': SubmissionSerializer(submission).data,
-            'result': result,
-            'session_ended': submission.status == Submission.Status.ACCEPTED,
-            'leaderboard': GameSessionView().get_leaderboard_data(session) if submission.status == Submission.Status.ACCEPTED else None
-        }, status=status.HTTP_201_CREATED)
-
-    # Override standard methods to return 405
-    def retrieve(self, request, *args, **kwargs):
-        return Response(
-            {"detail": "Method not allowed. Use /solve/{problem_id}/details/ to get problem details."},
-            status=status.HTTP_405_METHOD_NOT_ALLOWED
-        )
-
-    def create(self, request, *args, **kwargs):
-        return Response(
-            {"detail": "Method not allowed. Use /solve/{problem_id}/submit/ to submit a solution."},
-            status=status.HTTP_405_METHOD_NOT_ALLOWED
-        )
+            
+                # Basic status determination
+                status_code = Submission.Status.ACCEPTED
+                
+                # Check for errors
+                if result.get('error') or result.get('stderr'):
+                    status_code = Submission.Status.RUNTIME_ERROR
+                    if 'compile' in result and result['compile'].get('stderr'):
+                        status_code = Submission.Status.COMPILATION_ERROR
+            
+                # Check test case output
+                if status_code == Submission.Status.ACCEPTED and testcases and len(testcases) > 0:
+                    expected = str(testcases[i].get('expected_output', '')).strip()
+                    actual = str(result.get('stdout', '')).strip()
+                    if expected == actual:
+                        passed += 1
+                    
+                    else:
+                        status_code = Submission.Status.WRONG_ANSWER
+            
+                # Update submission status
+                submission.status = status_code
+            
+                # Add execution metrics if available
+                time_taken = 0
+                memory_used = 0
+            
+                if 'raw_response' in result and 'run' in result['raw_response']:
+                    run_data = result['raw_response']['run']
+                    time_taken = run_data.get('time', 0)
+                    memory_used = run_data.get('memory', 0)
+            
+                submission.execution_time = time_taken
+                submission.memory_usage = memory_used
+                submission.save()
+            
+                # Format output for response
+                output_data = {
+                    "result": {
+                        "status": submission.get_status_display(),
+                        "error": result.get('error') or result.get('stderr') or "No errors",
+                        "output": result.get('stdout', ''),
+                        "time": f"{time_taken}s",
+                        "memory": f"{memory_used}MB"
+                    },
+                    "submission_id": submission.id,
+                    "passed": passed
+                }
+            
+            # Add session data if part of a session
+            if game_session:
+                # Check if user solved all problems and passed all test cases
+                session_ended = False
+                leaderboard = None
+                
+                # Check if all test cases were passed
+                if passed == len(testcases):
+                    # Mark this user as the winner
+                    participation = GameParticipation.objects.get(
+                        game_session=game_session,
+                        profile=profile
+                    )
+                    participation.problems_solved += 1
+                    participation.score += 100  # Award points for solving
+                    participation.save()
+                    
+                    # End the session
+                    game_session.is_active = False
+                    game_session.end_time = timezone.now()
+                    game_session.save()
+                    
+                    # Set session_ended to true and prepare leaderboard
+                    session_ended = True
+                    leaderboard = self.get_leaderboard_data(game_session)
+                    
+                    # Notify all participants about the winner
+                    WebSocketManager.notify_session_update(
+                        str(game_session.id),  # Convert to string to ensure proper formatting
+                        'game_end', 
+                        {
+                            'type': 'game_ended',
+                            'winner': {
+                                'id': profile.id,
+                                'username': profile.user.username,
+                                'display_name': profile.display_name
+                            },
+                            'leaderboard': leaderboard
+                        }
+                    )
+                
+                # Add these to the response
+                output_data["session_ended"] = session_ended
+                output_data["winner"] = {
+                    'id': profile.id,
+                    'username': profile.user.username,
+                    'display_name': profile.display_name
+                } if session_ended else None
+                
+                if session_ended:
+                    output_data["leaderboard"] = leaderboard
+            
+            print("\n\n-------------------------------------------------------------")
+            print(passed)
+            print("-------------------------------------------------------------\n\n")
+            
+            return Response(output_data)
+            
+        except Exception as e:
+            # Log the error
+            print(f"Error processing submission: {str(e)}")
+            
+            # Update submission status
+            submission.status = Submission.Status.RUNTIME_ERROR
+            submission.save()
+            
+            return Response({
+                "result": {
+                    "status": "Error",
+                    "error": str(e),
+                    "output": "",
+                    "time": "0s",
+                    "memory": "0MB"
+                },
+                "submission_id": submission.id
+            })
 
 @api_view(['GET'])
 def current_user(request):

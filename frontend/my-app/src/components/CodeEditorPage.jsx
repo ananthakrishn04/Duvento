@@ -332,6 +332,9 @@ const CodeEditorPage = () => {
                   {winnerData.display_name} has won the game!
                 </p>
               )}
+              <p className="text-sm text-gray-600 mb-2">
+                ELO ratings have been updated based on match results.
+              </p>
             </div>
             
             {leaderboardData && leaderboardData.length > 0 && (
@@ -341,7 +344,20 @@ const CodeEditorPage = () => {
                   {leaderboardData.map((player, index) => (
                     <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
                       <span className="font-medium">{index + 1}. {player.username}</span>
-                      <span className="text-sm text-gray-500">Score: {player.score}</span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm text-gray-500">Score: {player.score}</span>
+                        {player.rating && (
+                          <span className="text-xs font-medium">
+                            Rating: {player.rating}
+                            {player.rating_change > 0 && (
+                              <span className="text-green-600 ml-1">+{player.rating_change}</span>
+                            )}
+                            {player.rating_change < 0 && (
+                              <span className="text-red-600 ml-1">{player.rating_change}</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>

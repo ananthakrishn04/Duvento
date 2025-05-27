@@ -128,10 +128,17 @@ const ProfilePage = () => {
               </p>
               
               {/* Stats cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                <div className="bg-gray-50 p-4 rounded-lg text-center">
-                  <p className="text-gray-500 text-sm">Rating</p>
-                  <p className="text-2xl font-bold text-blue-600">{profileData?.rating || 1500}</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6">
+                <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg text-center border-2 border-blue-200 shadow-sm">
+                  <p className="text-gray-600 text-sm font-medium">ELO Rating</p>
+                  <p className="text-3xl font-bold text-blue-600">{profileData?.rating || 1500}</p>
+                  <div className="mt-1 text-xs">
+                    {profileData?.rank && (
+                      <span className="inline-block px-2 py-1 bg-blue-200 text-blue-800 rounded-full font-medium">
+                        Rank #{profileData.rank}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-lg text-center">
                   <p className="text-gray-500 text-sm">Problems Solved</p>
@@ -141,10 +148,15 @@ const ProfilePage = () => {
                   <p className="text-gray-500 text-sm">Current Streak</p>
                   <p className="text-2xl font-bold text-orange-600">{profileData?.streak || 0} days</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg text-center">
-                  <p className="text-gray-500 text-sm">Rank</p>
-                  <p className="text-2xl font-bold text-purple-600">#{profileData?.rank || '–'}</p>
-                </div>
+              </div>
+              
+              {/* Rating description */}
+              <div className="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="font-semibold text-blue-800 mb-2">About ELO Rating</h3>
+                <p className="text-sm text-gray-700">
+                  Your ELO rating represents your skill level in competitive coding. Win matches against higher-rated players to gain more points.
+                  Ratings are updated after every match based on match outcome and opponent ratings.
+                </p>
               </div>
             </div>
           </div>

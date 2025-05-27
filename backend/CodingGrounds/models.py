@@ -230,17 +230,23 @@ class GameSession(models.Model):
         return False
 
     def calculate_score(self, time_taken, difficulty, incorrect_submissions, total_submissions, player_rating, opponent_rating, previous_score):
-        """Calculate the new score for a participant based on duel parameters."""
-        # Ensure all values are at least 1 to avoid zeroing out the product
-        time_taken = max(1, time_taken)
-        difficulty = max(1, difficulty)
-        incorrect_submissions = max(1, incorrect_submissions)
-        total_submissions = max(1, total_submissions)
-        player_rating = max(1, player_rating)
-        opponent_rating = max(1, opponent_rating)
+        """Calculate score based on performance metrics"""
+        # Base score depends on problem difficulty
+        base_score = difficulty * 100
         
-        product = time_taken * difficulty * incorrect_submissions * total_submissions * player_rating * opponent_rating
-        return previous_score + product
+        # Time penalty (the faster, the better)
+        time_factor = max(0, 1 - (time_taken / (15 * 60)))  # Normalize to 15 min max
+        
+        # Penalty for incorrect submissions
+        accuracy = 1.0
+        if total_submissions > 0:
+            accuracy = max(0, 1 - (incorrect_submissions / total_submissions))
+        
+        # Calculate final score
+        score = int(base_score * time_factor * accuracy)
+        
+        # Ensure minimum score
+        return max(previous_score, score)
 
     def end_session(self):
         """End the game session and calculate final rankings and scores using duel logic"""
@@ -286,30 +292,108 @@ class GameSession(models.Model):
                 participation.final_rank = i + 1
                 participation.score = new_score
                 participation.save()
-                self._update_user_rating(participation)
+                
+                # Update ELO rating
+                self.update_elo_rating(participation, opponent)
         else:
-            # Fallback to old logic for non-duel sessions
+            # For non-duel sessions
             for rank, participation in enumerate(sorted_participations, 1):
                 participation.final_rank = rank
                 participation.score = max(0, 100 - (rank - 1) * 10) * participation.problems_solved
                 participation.save()
-                self._update_user_rating(participation)
+                
+                # Update rating based on final ranking
+                self.update_multi_player_rating(participation, sorted_participations)
+    
+    def update_elo_rating(self, player_participation, opponent_participation):
+        """Update player's ELO rating using the standard ELO formula"""
+        # Constants
+        K_FACTOR = 32  # K-factor determines how much ratings change (higher = more volatile)
+        
+        # Get profiles and current ratings
+        player = player_participation.profile
+        opponent = opponent_participation.profile
+        player_rating = player.rating
+        opponent_rating = opponent.rating
+        
+        # Determine actual outcome (1 for win, 0.5 for draw, 0 for loss)
+        outcome = 0.5  # Default to draw
+        
+        if player_participation.problems_solved > opponent_participation.problems_solved:
+            outcome = 1.0  # Win
+        elif player_participation.problems_solved < opponent_participation.problems_solved:
+            outcome = 0.0  # Loss
+        else:
+            # If tied on problems, compare time
+            if player_participation.total_time < opponent_participation.total_time:
+                outcome = 1.0  # Win by time
+            elif player_participation.total_time > opponent_participation.total_time:
+                outcome = 0.0  # Loss by time
+        
+        # Calculate expected outcome using ELO formula
+        expected = 1 / (1 + 10 ** ((opponent_rating - player_rating) / 400))
+        
+        # Calculate rating change
+        rating_change = int(K_FACTOR * (outcome - expected))
+        
+        # Store the rating change in the participation record
+        player_participation.rating_change = rating_change
+        player_participation.save()
+        
+        # Update player rating
+        player.rating = max(100, player.rating + rating_change)  # Ensure minimum rating of 100
+        player.save()
+        
+        # Update rank if needed (based on new rating)
+        # This could be improved with a periodic batch job to update all ranks
+        CodingProfile.objects.filter(rating__lt=player.rating).update(rank=models.F('rank') + 1)
+        
+        # Return the rating change for reference
+        return rating_change
+    
+    def update_multi_player_rating(self, participation, all_participations):
+        """Update ratings for multi-player games using a modified ELO system"""
+        # Constants
+        K_FACTOR = 24  # Slightly lower K-factor for multiplayer
+        
+        player = participation.profile
+        player_rank = participation.final_rank
+        total_players = len(all_participations)
+        
+        # Skip if only one player
+        if total_players <= 1:
+            return 0
+        
+        # Calculate normalized rank from 0 to 1 (0 = best, 1 = worst)
+        normalized_rank = (player_rank - 1) / (total_players - 1) if total_players > 1 else 0
+        
+        # Calculate average opponent rating
+        avg_opponent_rating = sum(p.profile.rating for p in all_participations if p.profile.id != player.id) / (total_players - 1)
+        
+        # Expected performance based on rating difference
+        rating_diff = avg_opponent_rating - player.rating
+        expected_rank = 1 / (1 + 10 ** (rating_diff / 400))
+        
+        # Rating change based on expected vs actual performance
+        # A player who performs as expected (normalized_rank ≈ expected_rank) gets minimal change
+        # Outperform expectations = positive change, underperform = negative change
+        rating_change = int(K_FACTOR * (expected_rank - normalized_rank))
+        
+        # Store the rating change in the participation record
+        participation.rating_change = rating_change
+        participation.save()
+        
+        # Update player rating
+        player.rating = max(100, player.rating + rating_change)
+        player.save()
+        
+        # Return the rating change
+        return rating_change
 
     def _update_user_rating(self, participation):
-        """Update a user's rating based on their performance in this session"""
-        # Simple ELO-like rating adjustment
-        profile = participation.profile
-        expected_rank = self._get_expected_rank(profile)
-        actual_rank = participation.final_rank
-        
-        # Calculate rating change based on expected vs actual performance
-        # Higher ranks (lower numbers) are better
-        rank_diff = expected_rank - actual_rank
-        rating_change = int(rank_diff * 10)
-        
-        # Apply rating change with some constraints
-        profile.rating = max(0, profile.rating + rating_change)
-        profile.save()
+        """Legacy method - kept for backward compatibility"""
+        # This is now handled by update_elo_rating and update_multi_player_rating
+        pass
     
     def _get_expected_rank(self, profile):
         """Calculate expected rank based on current rating"""
@@ -346,6 +430,7 @@ class GameParticipation(models.Model):
     final_rank = models.IntegerField(null=True, blank=True)
     score = models.IntegerField(default=0)
     is_ready = models.BooleanField(default=False)
+    rating_change = models.IntegerField(default=0, help_text="Change in rating after the session")
 
     class Meta:
         unique_together = ('game_session', 'profile')

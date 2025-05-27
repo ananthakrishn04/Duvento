@@ -278,13 +278,18 @@ class GameSessionView(viewsets.ModelViewSet):
             minutes, seconds = divmod(participation.total_time, 60)
             formatted_time = f"{minutes:02d}:{seconds:02d}"
             
+            # Get profile and rating information
+            profile = participation.profile
+            
             participant_data = {
-                'profile_id': participation.profile.id,
-                'username': participation.profile.display_name,
+                'profile_id': profile.id,
+                'username': profile.display_name,
                 'problems_solved': participation.problems_solved,
                 'total_time': participation.total_time,
                 'formatted_time': formatted_time,
-                'score': participation.score
+                'score': participation.score,
+                'rating': profile.rating,
+                'rating_change': participation.rating_change
             }
             participants_data.append(participant_data)
         return participants_data
@@ -571,7 +576,13 @@ class GameSessionView(viewsets.ModelViewSet):
             session.end_time = timezone.now()
             session.save()
             
-            # Get leaderboard data
+            # Get leaderboard data before computing ratings
+            leaderboard_data_before = self.get_leaderboard_data(session)
+            
+            # End the session properly, updating ELO ratings
+            session.end_session()
+            
+            # Get updated leaderboard data after ratings update
             leaderboard_data = self.get_leaderboard_data(session)
             
             # Determine the winner based on most problems solved
@@ -600,14 +611,16 @@ class GameSessionView(viewsets.ModelViewSet):
                     'type': 'game_ended',
                     'timeout': True,
                     'winner': winner_data,
-                    'leaderboard': leaderboard_data
+                    'leaderboard': leaderboard_data,
+                    'ratings_updated': True
                 }
             )
             
             return Response({
                 "detail": "Session ended due to timeout",
                 "leaderboard": leaderboard_data,
-                "winner": winner_data
+                "winner": winner_data,
+                "ratings_updated": True
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
@@ -910,6 +923,9 @@ class SolveProblemView(viewsets.ModelViewSet):
                     game_session.end_time = timezone.now()
                     game_session.save()
 
+                    # End session properly to update ELO ratings
+                    game_session.end_session()
+
                     # Set session_ended to true and prepare leaderboard
                     session_ended = True
                     leaderboard = self.get_leaderboard_data(game_session)
@@ -925,7 +941,8 @@ class SolveProblemView(viewsets.ModelViewSet):
                                 'username': profile.user.username,
                                 'display_name': profile.display_name
                             },
-                            'leaderboard': leaderboard
+                            'leaderboard': leaderboard,
+                            'ratings_updated': True
                         }
                     )
                 
